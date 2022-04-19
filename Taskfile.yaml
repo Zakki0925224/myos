@@ -1,0 +1,62 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+    PROJECT_NAME: "myos"
+
+    OUTPUT_DIR: build
+    BOOT_DIR: boot
+    BOOT_DIR_FILES: |
+        boot
+        multiboot_header
+
+    RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
+    KERNEL_FILE: kernel.bin
+    LINKER_FILE: linker.ld
+    OS_IMAGE_FILE: os.iso
+    GRUB_FILE: grub.cfg
+
+    ASM_EX: .asm
+    OBJ_EX: .o
+
+    NASM: nasm -f elf -o
+    LD: ld -m elf_i386 -v -nostdlib -o {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} -T {{$.LINKER_FILE}}
+
+
+tasks:
+    init:
+        cmds:
+            - mkdir {{$.OUTPUT_DIR}}
+
+    clear:
+        cmds:
+            - rm -rf {{$.OUTPUT_DIR}}/*
+
+    rustb:
+        deps: [clear]
+        cmds:
+            - cargo xbuild
+
+    makeelf:
+        deps: [clear, rustb]
+        cmds:
+            - |
+                {{range .BOOT_DIR_FILES | splitLines -}}
+                {{if .}}{{$.NASM}} {{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}} {{$.BOOT_DIR}}/{{.}}{{$.ASM_EX}}{{end}}
+                {{end -}}
+                {{.LD}} {{range .BOOT_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
+
+    build:
+        deps: [makeelf]
+        cmds:
+            - mkdir -p {{$.OUTPUT_DIR}}/isofiles/boot/grub
+            - cp {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/
+            - cp {{$.GRUB_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/grub/
+            - grub-mkrescue -o {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} {{$.OUTPUT_DIR}}/isofiles 2> /dev/null
+            - rm -r {{$.OUTPUT_DIR}}/isofiles
+
+    run:
+        deps: [build]
+        cmds:
+            - qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}}
