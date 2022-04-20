@@ -10,3 +10,5 @@ GRUBを使ったrust製自作OS
 * mtools
 * go-task
 * xorriso
+* grub
+* ld
