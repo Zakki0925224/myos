@@ -1,3 +1,5 @@
+use core::fmt;
+
 const VGA_HEIGHT: usize = 25;
 const VGA_WIDTH: usize = 80;
 const VGA_MEM: u32 = 0xb8000;
@@ -5,6 +7,7 @@ const VGA_MEM: u32 = 0xb8000;
 const TAB_CHAR: char = ' ';
 const TAB_INDENT_SIZE: usize = 4;
 
+#[derive(Debug)]
 pub enum Color
 {
     Black = 0,
@@ -157,5 +160,14 @@ impl VgaScreen
         {
             self.write_data(0, i as isize);
         }
+    }
+}
+
+impl fmt::Write for VgaScreen
+{
+    fn write_str(&mut self, s: &str) -> fmt::Result
+    {
+        self.write_string(s);
+        return Ok(());
     }
 }
