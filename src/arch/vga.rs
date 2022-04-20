@@ -59,7 +59,6 @@ impl VgaScreen
 
     pub fn write_char(&mut self, c: char)
     {
-        let buffer = VGA_MEM as *mut u8;
         let offset = convert_curosr_pos_to_offset(self.cursor_x, self.cursor_y) as isize;
 
         match c
@@ -85,8 +84,6 @@ impl VgaScreen
 
     pub fn cls(&mut self)
     {
-        let buffer = VGA_MEM as *mut u8;
-
         for i in 0..VGA_HEIGHT * VGA_WIDTH * 2
         {
             self.write_data(0, i as isize);
@@ -98,25 +95,19 @@ impl VgaScreen
 
     fn write_data(&mut self, data: u8, offset: isize)
     {
-        unsafe
-        {
-            let buffer = VGA_MEM as *mut u8;
-            unsafe { *buffer.offset(offset) = data; }
-        }
+        let buffer = VGA_MEM as *mut u8;
+        unsafe { *buffer.offset(offset) = data; }
     }
 
     fn read_data(&mut self, offset: isize) -> u8
     {
-        unsafe
-        {
-            let buffer = VGA_MEM as *mut u8;
-            return unsafe { *buffer.offset(offset) };
-        }
+        let buffer = VGA_MEM as *mut u8;
+        return unsafe { *buffer.offset(offset) };
     }
 
     fn new_line(&mut self)
     {
-        for i in self.cursor_x..=VGA_WIDTH
+        for _i in self.cursor_x..=VGA_WIDTH
         {
             self.inc_cursor();
         }
@@ -124,7 +115,7 @@ impl VgaScreen
 
     fn horizontal_tab(&mut self)
     {
-        for i in 0..TAB_INDENT_SIZE
+        for _i in 0..TAB_INDENT_SIZE
         {
             self.write_char(TAB_CHAR);
         }

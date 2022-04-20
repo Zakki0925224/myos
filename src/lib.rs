@@ -16,7 +16,7 @@ pub extern "C" fn kernel_main() -> !
     let mut screen = VgaScreen::new(Color::White, Color::Black);
     screen.cls();
     //screen.write_string("Welcome to my os!");
-    write!(screen, "Hello, {}", 1 + 2 * 5);
+    write!(screen, "Welcome to {}: v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")).unwrap();
 
     loop {};
 }
