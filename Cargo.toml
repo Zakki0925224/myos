@@ -1,6 +1,7 @@
 [package]
 name = "myos"
 version = "0.1.0"
+description = "This is my os in Rust with GRUB"
 edition = "2021"
 authors = ["Zakki <https://github.com/Zakki0925224>"]
 
