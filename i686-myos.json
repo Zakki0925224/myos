@@ -12,5 +12,6 @@
     "archive-format": "gnu",
     "linker-flavor": "ld",
     "linker-is-gnu": true,
-    "disable-redzone": true
+    "disable-redzone": true,
+    "executables": true
 }

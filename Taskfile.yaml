@@ -61,3 +61,8 @@ tasks:
         deps: [build]
         cmds:
             - qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}}
+
+    # TODO: faile to compile
+    #test:
+    #    cmds:
+    #        - cargo test -Z build-std=core --no-run

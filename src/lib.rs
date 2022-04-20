@@ -1,44 +1,59 @@
 #![no_std]
+#![no_main]
 #![feature(asm)]
 #![feature(start)]
 #![feature(core_intrinsics)]
+#![feature(custom_test_frameworks)]
+#![test_runner(crate::test_runner)]
+#![reexport_test_harness_main = "test_main"]
 
 pub mod arch;
 pub mod meta;
 
-use core::{panic::PanicInfo, fmt::Write};
-
-use arch::{vga::{VGA_SCREEN}, asm};
+use core::panic::PanicInfo;
+use arch::{vga::{VGA_SCREEN, Color}, asm};
 
 #[no_mangle]
 #[start]
 pub extern "C" fn kernel_main() -> !
 {
-    // VGA_SCREEN.lock().cls();
-
-    // write!(VGA_SCREEN.lock(), "Welcome to {}!\n", meta::OS_NAME).unwrap();
-    // write!(VGA_SCREEN.lock(), "Description: {}\n", meta::OS_DESCRIPTION).unwrap();
-    // write!(VGA_SCREEN.lock(), "Version: {}\n", meta::OS_VERSION).unwrap();
-    // write!(VGA_SCREEN.lock(), "Author: {}\n", meta::OS_AUTHORS).unwrap();
-
     println!("Welcome to {}!", meta::OS_NAME);
     println!("Description: {}", meta::OS_DESCRIPTION);
     println!("Version: {}", meta::OS_VERSION);
     println!("Author: {}", meta::OS_AUTHORS);
 
+    #[cfg(test)]
+    test_main();
+
     loop
     {
         unsafe { asm::io_hlt(); }
     }
-
-    loop
-    {
-        unsafe { asm::io_hlt(); }
-    };
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> !
+fn panic(info: &PanicInfo) -> !
 {
+    VGA_SCREEN.lock().set_color(Color::Red, Color::Black);
+    println!("{}", info);
     loop {};
+}
+
+#[cfg(test)]
+fn test_runner(tests: &[&dyn Fn()])
+{
+    println!("Running {} tests", tests.len());
+
+    for test in tests
+    {
+        test();
+    }
+}
+
+#[test_case]
+fn trivial_assertion()
+{
+    print!("trivial assertion... ");
+    assert_eq!(1, 1);
+    println!("[ok]");
 }
