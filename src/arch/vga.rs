@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{fmt, ptr::{write_volatile, read_volatile}};
 
 const VGA_HEIGHT: usize = 25;
 const VGA_WIDTH: usize = 80;
@@ -95,14 +95,20 @@ impl VgaScreen
 
     fn write_data(&mut self, data: u8, offset: isize)
     {
-        let buffer = VGA_MEM as *mut u8;
-        unsafe { *buffer.offset(offset) = data; }
+        unsafe
+        {
+            let buffer = VGA_MEM as *mut u8;
+            write_volatile(buffer.offset(offset), data);
+        }
     }
 
     fn read_data(&mut self, offset: isize) -> u8
     {
-        let buffer = VGA_MEM as *mut u8;
-        return unsafe { *buffer.offset(offset) };
+        unsafe
+        {
+            let buffer = VGA_MEM as *mut u8;
+            return read_volatile(buffer.offset(offset));
+        }
     }
 
     fn new_line(&mut self)
