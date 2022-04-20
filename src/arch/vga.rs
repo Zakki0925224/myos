@@ -72,6 +72,14 @@ impl VgaScreen
         }
     }
 
+    pub fn write_string(&mut self, s: &str)
+    {
+        for c in s.chars()
+        {
+            self.write_char(c);
+        }
+    }
+
     pub fn cls(&mut self)
     {
         let buffer = VGA_MEM as *mut u8;

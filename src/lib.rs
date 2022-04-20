@@ -18,12 +18,7 @@ pub extern "C" fn kernel_main() -> !
 
     for i in 0..500
     {
-        screen.write_char('H');
-        screen.write_char('e');
-        screen.write_char('l');
-        screen.write_char('l');
-        screen.write_char('o');
-        screen.write_char('!');
+        screen.write_string("HELLO\t");
     }
 
     loop {};
