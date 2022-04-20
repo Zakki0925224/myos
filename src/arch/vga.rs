@@ -1,4 +1,4 @@
-use core::{fmt, ptr::{write_volatile, read_volatile}};
+use core::{fmt::{self, Write}, ptr::{write_volatile, read_volatile}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -51,12 +51,15 @@ impl VgaScreen
 {
     pub fn new(fore_color: Color, back_color: Color) -> VgaScreen
     {
-        return VgaScreen
+        let mut screen = VgaScreen
         {
             color_code: (back_color as u8) << 4 | (fore_color as u8),
             cursor_x: 1,
             cursor_y: 1
         };
+        screen.cls();
+
+        return screen;
     }
 
     pub fn set_color(&mut self, fore_color: Color, back_color: Color)
@@ -174,4 +177,24 @@ impl fmt::Write for VgaScreen
         self.write_string(s);
         return Ok(());
     }
+}
+
+// print!, println! macro
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments)
+{
+    VGA_SCREEN.lock().write_fmt(args).unwrap();
+}
+
+#[macro_export]
+macro_rules! print
+{
+    ($($arg:tt)*) => ($crate::arch::vga::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println
+{
+    () => ($crate::print!("\n"));
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
