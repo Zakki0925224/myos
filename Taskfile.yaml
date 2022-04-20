@@ -8,7 +8,7 @@ vars:
     OUTPUT_DIR: build
     BOOT_DIR: boot
     BOOT_DIR_FILES: |
-        boot
+        kernel
         multiboot_header
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
