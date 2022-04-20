@@ -8,7 +8,7 @@ pub mod meta;
 
 use core::{panic::PanicInfo, fmt::Write};
 
-use arch::vga::{VgaScreen, Color};
+use arch::{vga::{VgaScreen, Color}, asm};
 
 #[no_mangle]
 #[start]
@@ -22,7 +22,10 @@ pub extern "C" fn kernel_main() -> !
     write!(screen, "Version: {}\n", meta::OS_VERSION).unwrap();
     write!(screen, "Author: {}\n", meta::OS_AUTHORS).unwrap();
 
-    loop {};
+    loop
+    {
+        unsafe { asm::io_hlt(); }
+    };
 }
 
 #[panic_handler]

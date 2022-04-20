@@ -6,10 +6,11 @@ vars:
     PROJECT_NAME: "myos"
 
     OUTPUT_DIR: build
-    BOOT_DIR: boot
-    BOOT_DIR_FILES: |
+    X86_DIR: x86
+    X86_DIR_FILES: |
         kernel
         multiboot_header
+        func
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
     KERNEL_FILE: kernel.bin
@@ -42,10 +43,10 @@ tasks:
         deps: [clear, rustb]
         cmds:
             - |
-                {{range .BOOT_DIR_FILES | splitLines -}}
-                {{if .}}{{$.NASM}} {{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}} {{$.BOOT_DIR}}/{{.}}{{$.ASM_EX}}{{end}}
+                {{range .X86_DIR_FILES | splitLines -}}
+                {{if .}}{{$.NASM}} {{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}} {{$.X86_DIR}}/{{.}}{{$.ASM_EX}}{{end}}
                 {{end -}}
-                {{.LD}} {{range .BOOT_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
+                {{.LD}} {{range .X86_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
 
     build:
         deps: [makeelf]
