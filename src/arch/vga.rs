@@ -1,4 +1,6 @@
 use core::{fmt, ptr::{write_volatile, read_volatile}};
+use lazy_static::lazy_static;
+use spin::Mutex;
 
 const VGA_HEIGHT: usize = 25;
 const VGA_WIDTH: usize = 80;
@@ -6,6 +8,11 @@ const VGA_MEM: u32 = 0xb8000;
 
 const TAB_CHAR: char = ' ';
 const TAB_INDENT_SIZE: usize = 4;
+
+lazy_static!
+{
+    pub static ref VGA_SCREEN: Mutex<VgaScreen> = Mutex::new(VgaScreen::new(Color::White, Color::Black));
+}
 
 #[derive(Debug)]
 pub enum Color
