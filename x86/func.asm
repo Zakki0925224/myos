@@ -1,4 +1,4 @@
-global io_hlt, io_cli, io_sti, io_stihlt
+global io_hlt, io_cli, io_sti, io_stihlt, io_test
 section .text
 
 io_hlt:
@@ -17,3 +17,6 @@ io_stihlt:
     sti
     hlt
     ret
+
+io_test:
+    int 0x80

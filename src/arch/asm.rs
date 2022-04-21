@@ -4,4 +4,5 @@ extern
     pub fn io_cli();
     pub fn io_sti();
     pub fn io_stihlt();
+    pub fn io_test();
 }

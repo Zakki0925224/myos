@@ -22,6 +22,8 @@ pub extern "C" fn kernel_main() -> !
     println!("Version: {}", meta::OS_VERSION);
     println!("Author: {}", meta::OS_AUTHORS);
 
+    unsafe { asm::io_test(); }
+
     #[cfg(test)]
     test_main();
 
