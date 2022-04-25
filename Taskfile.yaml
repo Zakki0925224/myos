@@ -10,7 +10,6 @@ vars:
     X86_DIR_FILES: |
         kernel
         multiboot_header
-        func
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
     KERNEL_FILE: kernel.bin
@@ -60,7 +59,20 @@ tasks:
     run:
         deps: [build]
         cmds:
-            - qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}}
+            - qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -d int -no-reboot -no-shutdown
+
+    debug:
+        deps: [build]
+        cmds:
+            - qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -d int -no-reboot -no-shutdown -s -S
+
+    gdb:
+        cmds:
+            - rust-gdb "{{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}}" -ex "target remote localhost:1234"
+
+    dump:
+        cmds:
+            - objdump -d {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} > dump.txt
 
     # TODO: faile to compile
     #test:

@@ -13,6 +13,8 @@ pub mod meta;
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm};
 
+use crate::arch::int::{self, pic};
+
 #[no_mangle]
 #[start]
 pub extern "C" fn kernel_main() -> !
@@ -22,15 +24,15 @@ pub extern "C" fn kernel_main() -> !
     println!("Version: {}", meta::OS_VERSION);
     println!("Author: {}", meta::OS_AUTHORS);
 
-    unsafe { asm::io_test(); }
+    int::init();
+    pic::init();
+    asm::sti();
+    pic::allow_input();
 
     #[cfg(test)]
     test_main();
 
-    loop
-    {
-        unsafe { asm::io_hlt(); }
-    }
+    loop { asm::hlt(); }
 }
 
 #[panic_handler]
