@@ -3,17 +3,15 @@
 #![feature(asm)]
 #![feature(start)]
 #![feature(core_intrinsics)]
-#![feature(custom_test_frameworks)]
-#![test_runner(crate::test_runner)]
-#![reexport_test_harness_main = "test_main"]
+// #![feature(custom_test_frameworks)]
+// #![test_runner(crate::test_runner)]
+// #![reexport_test_harness_main = "test_main"]
 
 pub mod arch;
 pub mod meta;
 
 use core::panic::PanicInfo;
-use arch::{vga::{VGA_SCREEN, Color}, asm};
-
-use crate::arch::int::{self, pic};
+use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 
 #[no_mangle]
 #[start]
@@ -24,13 +22,11 @@ pub extern "C" fn kernel_main() -> !
     println!("Version: {}", meta::OS_VERSION);
     println!("Author: {}", meta::OS_AUTHORS);
 
-    int::init();
-    pic::init();
-    asm::sti();
-    pic::allow_input();
+    sgm::init();
+    println!("GDT: {:?}", sgm::get_gdt(-1));
 
-    #[cfg(test)]
-    test_main();
+    // #[cfg(test)]
+    // test_main();
 
     loop { asm::hlt(); }
 }
@@ -43,21 +39,21 @@ fn panic(info: &PanicInfo) -> !
     loop {};
 }
 
-#[cfg(test)]
-fn test_runner(tests: &[&dyn Fn()])
-{
-    println!("Running {} tests", tests.len());
+// #[cfg(test)]
+// fn test_runner(tests: &[&dyn Fn()])
+// {
+//     println!("Running {} tests", tests.len());
 
-    for test in tests
-    {
-        test();
-    }
-}
+//     for test in tests
+//     {
+//         test();
+//     }
+// }
 
-#[test_case]
-fn trivial_assertion()
-{
-    print!("trivial assertion... ");
-    assert_eq!(1, 1);
-    println!("[ok]");
-}
+// #[test_case]
+// fn trivial_assertion()
+// {
+//     print!("trivial assertion... ");
+//     assert_eq!(1, 1);
+//     println!("[ok]");
+// }
