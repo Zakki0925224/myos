@@ -13,6 +13,8 @@ pub mod meta;
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 
+use crate::arch::int;
+
 #[no_mangle]
 #[start]
 pub extern "C" fn kernel_main() -> !
@@ -23,8 +25,10 @@ pub extern "C" fn kernel_main() -> !
     println!("Author: {}", meta::OS_AUTHORS);
 
     sgm::init();
-    //asm::test();
-    println!("GDT: {:?}", sgm::get_gdt(-1));
+    int::init_pic();
+    asm::sti();
+
+    println!("GDT: {:?}", sgm::get_idt(33));
 
     // #[cfg(test)]
     // test_main();

@@ -75,20 +75,10 @@ macro_rules! handler
         {
             unsafe
             {
-                asm!("push es");
-                asm!("push ds");
                 asm!("pushad");
-                asm!("mov eax, esp");
-                asm!("push eax");
-                asm!("mov ax, ss");
-                asm!("mov ds, ax");
-                asm!("mov es, ax");
                 asm!("call {}", in(reg) $name as extern "C" fn());
-                asm!("pop eax");
                 asm!("popad");
-                asm!("pop ds");
-                asm!("pop es");
-                asm!("iret");
+                asm!("iretd");
                 ::core::intrinsics::unreachable();
             }
         }

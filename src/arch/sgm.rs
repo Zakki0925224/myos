@@ -1,9 +1,14 @@
+use crate::handler;
+
 use super::asm;
 
 const GDT_ADDR: i32 = 0x00270000;
 const GDT_LIMIT: i32 = 0x0000ffff;
 const IDT_ADDR: i32 = 0x0026f800;
 const IDT_LIMIT: i32 = 0x000007ff;
+const IDT_INT_SELECTOR: i32 = 0x00000008;
+
+const AR_INTGATE32: i32 = 0x008e;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -65,6 +70,9 @@ impl GateDescriptor
 
 pub fn init()
 {
+    use crate::int::{keyboard_int, INT_VECTOR_IRQ1};
+    use core::arch::asm;
+
     // init GDT
     for i in 0..=(GDT_LIMIT / 8)
     {
@@ -97,6 +105,10 @@ pub fn init()
         let idt = unsafe { &mut *((IDT_ADDR + i * 8) as *mut GateDescriptor) };
         *idt = GateDescriptor::new(0, 0, 0);
     }
+
+    // set interrupts
+    let idt = unsafe { &mut *((IDT_ADDR + INT_VECTOR_IRQ1 * 8) as *mut GateDescriptor) };
+    *idt = GateDescriptor::new(handler!(keyboard_int) as u32, IDT_INT_SELECTOR, AR_INTGATE32);
 
     asm::load_idtr(IDT_LIMIT, IDT_ADDR);
 }
