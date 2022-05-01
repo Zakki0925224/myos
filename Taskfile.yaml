@@ -10,6 +10,7 @@ vars:
     X86_DIR_FILES: |
         kernel
         multiboot_header
+        extfunc
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
     KERNEL_FILE: kernel.bin

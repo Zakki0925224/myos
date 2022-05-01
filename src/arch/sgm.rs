@@ -11,31 +11,29 @@ pub struct SegmentDescriptor
 {
     limit_low: u16,
     base_low: u16,
-    base_mid: u8,
-    access_right: u8,
-    limit_high: u8,
+    base_middle: u8,
+    flags: u16,
     base_high: u8
 }
 
 impl SegmentDescriptor
 {
-    fn new(mut limit: u32, base: i32, mut ar: i32) -> SegmentDescriptor
+    fn new(mut limit: u32, base: i32, mut flags: i32) -> SegmentDescriptor
     {
-        if limit > 0xfffff
+        if limit > 0xffff
         {
-            ar |= 0x8000;
             limit /= 0x1000;
+            flags |= 0x8000;
         }
 
         return SegmentDescriptor
         {
             limit_low: limit as u16,
             base_low: base as u16,
-            base_mid: (base >> 16) as u8,
-            access_right: ar as u8,
-            limit_high: ((limit >> 16) as u8 & 0x0f) | ((ar >> 8) as u8 & 0xf0),
+            base_middle: (base >> 16) as u8,
+            flags: flags as u16,
             base_high: (base >> 24) as u8
-        }
+        };
     }
 }
 
@@ -43,24 +41,24 @@ impl SegmentDescriptor
 #[repr(C, packed)]
 pub struct GateDescriptor
 {
-    offset_low: u16,
+    base_low: u16,
     selector: u16,
-    dw_count: u8,
-    access_right: u8,
-    offset_high: u16
+    reserved: u8,
+    flags: u8,
+    base_high: u16
 }
 
 impl GateDescriptor
 {
-    fn new(offset: u32, selector: i32, ar: i32) -> GateDescriptor
+    fn new(base: u32, selector: i32, flags: i32) -> GateDescriptor
     {
         return GateDescriptor
         {
-            offset_low: offset as u16,
+            base_low: base as u16,
             selector: selector as u16,
-            dw_count: (ar >> 8) as u8,
-            access_right: ar as u8,
-            offset_high: (offset >> 16) as u16
+            reserved: 0x0,
+            flags: flags as u8,
+            base_high: (base >> 16) as u16
         }
     }
 }
@@ -73,6 +71,23 @@ pub fn init()
         let gdt = unsafe { &mut *((GDT_ADDR + i * 8) as *mut SegmentDescriptor) };
         *gdt = SegmentDescriptor::new(0, 0, 0);
     }
+
+    // null descriptor
+    let gdt = unsafe { &mut *((GDT_ADDR + 0 * 8) as *mut SegmentDescriptor) };
+    *gdt = SegmentDescriptor::new(0, 0, 0);
+
+    // code descriptor
+    let gdt = unsafe { &mut *((GDT_ADDR + 1 * 8) as *mut SegmentDescriptor) };
+    *gdt = SegmentDescriptor::new(0xffff, 0, 0xcf9a);
+
+    // data descriptor
+    let gdt = unsafe { &mut *((GDT_ADDR + 2 * 8) as *mut SegmentDescriptor) };
+    *gdt = SegmentDescriptor::new(0xffff, 0, 0xcf92);
+
+    // temp descriptor
+    // task code descriptor
+    // task data descriptor
+    // ktss descriptor
 
     asm::load_gdtr(GDT_LIMIT, GDT_ADDR);
 

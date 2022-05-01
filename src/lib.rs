@@ -23,6 +23,7 @@ pub extern "C" fn kernel_main() -> !
     println!("Author: {}", meta::OS_AUTHORS);
 
     sgm::init();
+    //asm::test();
     println!("GDT: {:?}", sgm::get_gdt(-1));
 
     // #[cfg(test)]

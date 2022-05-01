@@ -2,6 +2,12 @@ use core::arch::asm;
 
 use crate::println;
 
+// extfunc
+extern
+{
+    fn init_sgm_reg();
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 struct Dtr
@@ -27,17 +33,25 @@ pub fn sti()
 
 pub fn test()
 {
-    unsafe { asm!("int 0x16"); }
+    //unsafe { asm!("int 0x16"); }
+    load_gdtr(0xdead, 0xbeaf);
 }
 
 pub fn load_idtr(limit: i32, addr: i32)
 {
-    unsafe { asm!("lidt [{}]", in(reg) &Dtr { limit: limit as i16, base: addr }); }
+    unsafe
+    {
+        asm!("lidt [{}]", in(reg) &Dtr { limit: limit as i16, base: addr });
+    }
 }
 
 pub fn load_gdtr(limit: i32, addr: i32)
 {
-    unsafe { asm!("lgdt [{}]", in(reg) &Dtr { limit: limit as i16, base: addr }); }
+    unsafe
+    {
+        asm!("lgdt [{}]", in(reg) &Dtr { limit: limit as i16, base: addr });
+        init_sgm_reg();
+    }
 }
 
 pub fn out8(port: u32, data: u8)
