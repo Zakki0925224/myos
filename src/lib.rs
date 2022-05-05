@@ -28,8 +28,6 @@ pub extern "C" fn kernel_main() -> !
     int::init_pic();
     asm::sti();
 
-    println!("GDT: {:?}", sgm::get_idt(33));
-
     // #[cfg(test)]
     // test_main();
 

@@ -1,4 +1,4 @@
-use crate::handler;
+use crate::{handler, println};
 
 use super::asm;
 
@@ -8,7 +8,7 @@ const IDT_ADDR: i32 = 0x0026f800;
 const IDT_LIMIT: i32 = 0x000007ff;
 const IDT_INT_SELECTOR: i32 = 0x00000008;
 
-const AR_INTGATE32: i32 = 0x008e;
+const INTGATE: i32 = 0x008e;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -98,6 +98,7 @@ pub fn init()
     // ktss descriptor
 
     asm::load_gdtr(GDT_LIMIT, GDT_ADDR);
+    println!("GDT initialized");
 
     // init IDT
     for i in 0..=(IDT_LIMIT / 8)
@@ -108,9 +109,10 @@ pub fn init()
 
     // set interrupts
     let idt = unsafe { &mut *((IDT_ADDR + INT_VECTOR_IRQ1 * 8) as *mut GateDescriptor) };
-    *idt = GateDescriptor::new(handler!(keyboard_int) as u32, IDT_INT_SELECTOR, AR_INTGATE32);
+    *idt = GateDescriptor::new(handler!(keyboard_int) as u32, IDT_INT_SELECTOR, INTGATE);
 
     asm::load_idtr(IDT_LIMIT, IDT_ADDR);
+    println!("IDT initialized");
 }
 
 pub fn get_gdt(index: i32) -> SegmentDescriptor
