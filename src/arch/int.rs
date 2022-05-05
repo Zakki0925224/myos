@@ -1,6 +1,6 @@
 // intel 8259A interrupt controller on PC/AT
 
-use crate::println;
+use crate::{println, arch::vga::{VGA_SCREEN, Color}};
 
 use super::asm;
 
@@ -53,8 +53,8 @@ pub fn init_pic()
     asm::out8(SLAVE_PIC_ADDR + 1, 0xff);
 
     // allow interrupts
-    asm::out8(MASTER_PIC_ADDR + 1, 0xf9);
-    asm::out8(SLAVE_PIC_ADDR + 1, 0xef);
+    asm::out8(MASTER_PIC_ADDR + 1, 0xf9);   // allow IRQ0-7
+    asm::out8(SLAVE_PIC_ADDR + 1, 0xef);    // allow IRQ8-15
 
     println!("PIC initialized");
 }
@@ -62,7 +62,7 @@ pub fn init_pic()
 /// PS/2 keyboard interrupt
 pub extern "C" fn keyboard_int()
 {
-    println!("IRQ-1 (PS/2 keyboard)");
+    int_info("IRQ-1 (PS/2 keyboard)");
 
     loop { asm::hlt(); }
 }
@@ -72,4 +72,11 @@ fn done_int()
     // write EOI command to PIC
     asm::out8(MASTER_PIC_ADDR, EOI_COMMAND);
     asm::out8(SLAVE_PIC_ADDR, EOI_COMMAND);
+}
+
+fn int_info(message: &str)
+{
+    VGA_SCREEN.lock().set_color(Color::Yellow, Color::Black);
+    println!("[INT]: {}", message);
+    VGA_SCREEN.lock().set_color(Color::White, Color::Black);
 }
