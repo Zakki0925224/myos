@@ -62,41 +62,20 @@ pub fn init_pic()
 /// PS/2 keyboard interrupt
 pub extern "C" fn keyboard_int()
 {
-    notice_reception_complate(INT_VECTOR_IRQ1);
     let data = asm::in8(0x60);
     VGA_SCREEN.lock().set_color(Color::Yellow, Color::Black);
     println!("[INT]: IRQ-1 (PS/2 keyboard), data: 0x{:x}", data);
     VGA_SCREEN.lock().set_color(Color::White, Color::Black);
-    //done_int();
-
-    //loop { asm::hlt(); }
+    done_int();
 }
 
 /// PS/2 mouse interrupt
 pub extern "C" fn mouse_int()
 {
-    notice_reception_complate(INT_VECTOR_IRQ12);
     VGA_SCREEN.lock().set_color(Color::Yellow, Color::Black);
     println!("[INT]: IRQ-12 (PS/2 mouse)");
     VGA_SCREEN.lock().set_color(Color::White, Color::Black);
-    //done_int();
-
-    //loop { asm::hlt(); }
-}
-
-/// resume next interrupt
-fn notice_reception_complate(port: i32)
-{
-    if port > INT_VECTOR_IRQ7
-    {
-        // master pic
-        asm::out8(MASTER_PIC_ADDR, 0x60 + (port - INT_VECTOR_IRQ0) as u8);
-    }
-    else
-    {
-        // slave pic
-        asm::out8(SLAVE_PIC_ADDR, 0x60 + (port - INT_VECTOR_IRQ0) as u8);
-    }
+    done_int();
 }
 
 fn done_int()
