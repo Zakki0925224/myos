@@ -147,7 +147,7 @@ impl VgaScreen
             self.cursor_y += 1;
         }
 
-        if self.cursor_y > VGA_HEIGHT
+        if self.cursor_y > VGA_HEIGHT + 1
         {
             self.scroll();
             self.cursor_x = 1;
