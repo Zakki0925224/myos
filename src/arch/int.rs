@@ -1,8 +1,20 @@
 // intel 8259A interrupt controller on PC/AT
 
-use crate::{println, arch::vga::{VGA_SCREEN, Color}};
+use crate::{println, arch::vga::{VGA_SCREEN, Color}, data::fifo::Fifo};
+use lazy_static::lazy_static;
+use spin::Mutex;
 
 use super::asm;
+
+lazy_static!
+{
+    pub static ref KEYBUF: Mutex<Fifo> = Mutex::new(Fifo::new(32));
+}
+
+lazy_static!
+{
+    pub static ref MOUSEBUF: Mutex<Fifo> = Mutex::new(Fifo::new(32));
+}
 
 const MASTER_PIC_ADDR: u32 = 0x0020;
 const SLAVE_PIC_ADDR: u32 = 0x00a0;
@@ -31,6 +43,16 @@ pub const INT_VECTOR_IRQ13: i32 = 0x2d;   // coprocessor
 pub const INT_VECTOR_IRQ14: i32 = 0x2e;   // HDD conteroller
 pub const INT_VECTOR_IRQ15: i32 = 0x2f;   // HDD controller
 
+// mouse
+const PORT_KEYDAT: u32 = 0x0060;
+const PORT_KEYCMD: u32 = 0x0064;
+const PORT_KEYSTA: u32 = 0x0064;
+const KEYSTA_SEND_NOT_READY: u8 = 0x02;
+const KEYCMD_WRITE_MODE: u8 = 0x60;
+const KBC_MODE: u8 = 0x47;
+const KEYCMD_SENDTO_MOUSE: u8 = 0xd4;
+const MOUSECMD_ENABLE: u8 = 0xf4;
+
 pub fn init_pic()
 {
     asm::out8(MASTER_PIC_ADDR + 1, DISALLOW_ALL_INTERRUPTS);
@@ -56,25 +78,40 @@ pub fn init_pic()
     asm::out8(MASTER_PIC_ADDR + 1, 0xf9);   // allow IRQ0-7
     asm::out8(SLAVE_PIC_ADDR + 1, 0xef);    // allow IRQ8-15
 
+    init_keyboard();
+
     println!("PIC initialized");
+}
+
+fn init_keyboard()
+{
+    wait_kbc_send_ready();
+    asm::out8(PORT_KEYCMD, KEYCMD_WRITE_MODE);
+    wait_kbc_send_ready();
+    asm::out8(PORT_KEYDAT, KBC_MODE);
+}
+
+pub fn enable_mouse()
+{
+    wait_kbc_send_ready();
+    asm::out8(PORT_KEYCMD, KEYCMD_SENDTO_MOUSE);
+    wait_kbc_send_ready();
+    asm::out8(PORT_KEYDAT, MOUSECMD_ENABLE);
 }
 
 /// PS/2 keyboard interrupt
 pub extern "C" fn keyboard_int()
 {
     let data = asm::in8(0x60);
-    VGA_SCREEN.lock().set_color(Color::Yellow, Color::Black);
-    println!("[INT]: IRQ-1 (PS/2 keyboard), data: 0x{:x}", data);
-    VGA_SCREEN.lock().set_color(Color::White, Color::Black);
+    KEYBUF.lock().put(data).unwrap();
     done_int();
 }
 
 /// PS/2 mouse interrupt
 pub extern "C" fn mouse_int()
 {
-    VGA_SCREEN.lock().set_color(Color::Yellow, Color::Black);
-    println!("[INT]: IRQ-12 (PS/2 mouse)");
-    VGA_SCREEN.lock().set_color(Color::White, Color::Black);
+    let data = asm::in8(PORT_KEYDAT);
+    MOUSEBUF.lock().put(data).unwrap();
     done_int();
 }
 
@@ -83,4 +120,16 @@ fn done_int()
     // write EOI command to PIC
     asm::out8(MASTER_PIC_ADDR, EOI_COMMAND);
     asm::out8(SLAVE_PIC_ADDR, EOI_COMMAND);
+}
+
+fn wait_kbc_send_ready()
+{
+    // wait for data ready
+    loop
+    {
+        if (asm::in8(PORT_KEYSTA) & KEYSTA_SEND_NOT_READY) == 0
+        {
+            break;
+        }
+    }
 }

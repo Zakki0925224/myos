@@ -8,12 +8,13 @@
 // #![reexport_test_harness_main = "test_main"]
 
 pub mod arch;
+pub mod data;
 pub mod meta;
 
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 
-use crate::arch::int;
+use crate::arch::int::{self, KEYBUF, MOUSEBUF};
 
 #[no_mangle]
 #[start]
@@ -26,12 +27,34 @@ pub extern "C" fn kernel_main() -> !
 
     sgm::init();
     int::init_pic();
+    int::enable_mouse();
     asm::sti();
 
     // #[cfg(test)]
     // test_main();
 
-    loop { asm::hlt(); }
+    loop
+    {
+        asm::cli();
+
+        if KEYBUF.lock().status() != 0
+        {
+            let key = KEYBUF.lock().get().unwrap();
+            asm::sti();
+            println!("[K]0x{:x}", key);
+        }
+        else if MOUSEBUF.lock().status() != 0
+        {
+            let i = MOUSEBUF.lock().get().unwrap();
+            asm::sti();
+            println!("[M]0x{:x}", i);
+        }
+        else
+        {
+            asm::sti();
+            asm::hlt();
+        }
+    }
 }
 
 #[panic_handler]
