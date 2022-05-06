@@ -15,7 +15,7 @@ pub mod meta;
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{self, Keyboard, KeyLayout}};
 
 #[no_mangle]
 #[start]
@@ -31,6 +31,8 @@ pub extern "C" fn kernel_main() -> !
     int::enable_mouse();
     asm::sti();
 
+    let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
+
     // #[cfg(test)]
     // test_main();
 
@@ -42,8 +44,7 @@ pub extern "C" fn kernel_main() -> !
         {
             let key = KEYBUF.lock().get().unwrap();
             asm::sti();
-            let e = keyboard::get_key(key);
-            println!("[K]: {:?}", e);
+            keyboard.input(key);
         }
         else if MOUSEBUF.lock().status() != 0
         {
