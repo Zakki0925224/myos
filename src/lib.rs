@@ -9,12 +9,13 @@
 
 pub mod arch;
 pub mod data;
+pub mod device;
 pub mod meta;
 
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 
-use crate::arch::int::{self, KEYBUF, MOUSEBUF};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard};
 
 #[no_mangle]
 #[start]
@@ -41,7 +42,8 @@ pub extern "C" fn kernel_main() -> !
         {
             let key = KEYBUF.lock().get().unwrap();
             asm::sti();
-            println!("[K]0x{:x}", key);
+            let e = keyboard::get_key(key);
+            println!("[K]: {:?}", e);
         }
         else if MOUSEBUF.lock().status() != 0
         {
