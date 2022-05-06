@@ -70,7 +70,7 @@ impl GateDescriptor
 
 pub fn init()
 {
-    use crate::int::{keyboard_int, INT_VECTOR_IRQ1};
+    use crate::int::{keyboard_int, mouse_int, INT_VECTOR_IRQ1, INT_VECTOR_IRQ12};
     use core::arch::asm;
 
     // init GDT
@@ -108,8 +108,13 @@ pub fn init()
     }
 
     // set interrupts
+    // PS/2 keyboard
     let idt = unsafe { &mut *((IDT_ADDR + INT_VECTOR_IRQ1 * 8) as *mut GateDescriptor) };
     *idt = GateDescriptor::new(handler!(keyboard_int) as u32, IDT_INT_SELECTOR, INTGATE);
+
+    // PS/2 mouse
+    let idt = unsafe { &mut *((IDT_ADDR + INT_VECTOR_IRQ12 * 8) as *mut GateDescriptor) };
+    *idt = GateDescriptor::new(handler!(mouse_int) as u32, IDT_INT_SELECTOR, INTGATE);
 
     asm::load_idtr(IDT_LIMIT, IDT_ADDR);
     println!("IDT initialized");

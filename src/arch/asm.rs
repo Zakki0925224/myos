@@ -1,7 +1,5 @@
 use core::arch::asm;
 
-use crate::println;
-
 // extfunc
 extern
 {
@@ -34,7 +32,7 @@ pub fn sti()
 pub fn test()
 {
     //unsafe { asm!("int 0x16"); }
-    load_gdtr(0xdead, 0xbeaf);
+    //load_gdtr(0xdead, 0xbeaf);
 }
 
 pub fn load_idtr(limit: i32, addr: i32)
@@ -88,7 +86,7 @@ macro_rules! handler
                 asm!("popad");
                 asm!("pop ds");
                 asm!("pop es");
-                asm!("iret");
+                asm!("iretd");
                 ::core::intrinsics::unreachable();
             }
         }
