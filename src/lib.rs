@@ -8,6 +8,7 @@
 // #![reexport_test_harness_main = "test_main"]
 
 pub mod arch;
+pub mod boot;
 pub mod data;
 pub mod device;
 pub mod meta;
@@ -19,9 +20,21 @@ use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{self, Keyboa
 
 #[no_mangle]
 #[start]
-pub extern "C" fn kernel_main() -> !
+pub extern "C" fn kernel_main(magic: u32, boot_info: *const boot::MultibootInfo) -> !
 {
-    println!("Welcome to {}!", meta::OS_NAME);
+    if magic != boot::MULTIBOOT_MAGIC_NUM
+    {
+        panic!("Invalid magic number: 0x{:x}\n
+        Magic number must be 0x{:x}", magic, boot::MULTIBOOT_MAGIC_NUM);
+    }
+
+    if boot_info.is_null()
+    {
+        panic!("Boot info is null");
+    }
+
+    unsafe { println!("{:?}", *boot_info); }
+    println!("\nWelcome to {}!", meta::OS_NAME);
     println!("Description: {}", meta::OS_DESCRIPTION);
     println!("Version: {}", meta::OS_VERSION);
     println!("Author: {}", meta::OS_AUTHORS);
