@@ -22,6 +22,7 @@ panic = "abort"
 [dependencies]
 volatile = "0.4.4"
 spin = "0.9.3"
+multiboot2 = "0.13.2"
 
 [dependencies.lazy_static]
 version = "1.4.0"
