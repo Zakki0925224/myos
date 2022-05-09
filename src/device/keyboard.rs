@@ -123,7 +123,7 @@ pub enum KeyCode
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AnsiUs104KeyMap
 {
-    pub map: [ScanCode; 104],
+    map: [ScanCode; 104],
 }
 
 impl AnsiUs104KeyMap
@@ -242,6 +242,11 @@ impl AnsiUs104KeyMap
             ]
         };
     }
+
+    pub fn get_key_map(&self) -> [ScanCode; 104]
+    {
+        return self.map;
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -291,7 +296,7 @@ impl Keyboard
             panic!("Unsupported keyboard layout");
         }
 
-        return Keyboard { layout, key_map: AnsiUs104KeyMap::new().map, key_buf: [0; 6], key_buf_cnt: 0 };
+        return Keyboard { layout, key_map: AnsiUs104KeyMap::new().get_key_map(), key_buf: [0; 6], key_buf_cnt: 0 };
     }
 
     fn clear_key_buf(&mut self)

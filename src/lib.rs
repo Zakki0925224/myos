@@ -7,12 +7,12 @@
 // #![test_runner(crate::test_runner)]
 // #![reexport_test_harness_main = "test_main"]
 
-pub mod arch;
-pub mod data;
-pub mod device;
-pub mod meta;
-pub mod mem;
-pub mod util;
+mod arch;
+mod data;
+mod device;
+mod meta;
+mod mem;
+mod util;
 
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
@@ -45,7 +45,7 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
 
     let pmm = PhysicalMemoryManager::new(&boot_info);
-    println!("PMM: {:?}", pmm);
+    println!("{:?}", pmm);
 
     println!("\n===============================");
     println!("Welcome to {}!", meta::OS_NAME);
