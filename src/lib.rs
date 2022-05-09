@@ -11,25 +11,23 @@ pub mod arch;
 pub mod data;
 pub mod device;
 pub mod meta;
+pub mod mem;
 pub mod util;
 
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2;
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{self, Keyboard, KeyLayout}};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{self, Keyboard, KeyLayout}, mem::phys_mem::PhysicalMemoryManager};
 
 #[no_mangle]
 #[start]
 pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 {
-    let boot_info = unsafe { multiboot2::load(boot_info_addr as usize).expect("Failed to load boot info") };
-    let memory_map_tag = boot_info.memory_map_tag().expect("No memory map tag");
-    let elf_sections_tag = boot_info.elf_sections_tag().expect("No elf sections tag");
-    let kernel_start = elf_sections_tag.sections().map(|s| s.start_address()).min().unwrap();
-    let kernel_end = elf_sections_tag.sections().map(|s| s.start_address() + s.size()).max().unwrap();
-    let mboot_start = boot_info.start_address();
-    let mboot_end = mboot_start + (boot_info.total_size() as usize);
+    let boot_info = unsafe { multiboot2::load(boot_info_addr as usize).expect("Failed to load
+    boot info") };
+    let (kernel_start, kernel_end) = mem::get_kernel_addr(&boot_info);
+    let (multiboot_start, multiboot_end) = mem::get_multiboot_addr(&boot_info);
 
     if magic != multiboot2::MULTIBOOT2_BOOTLOADER_MAGIC
     {
@@ -37,29 +35,17 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     }
 
     println!("All available memory areas:");
-    let mut total_size = 0;
-    for area in memory_map_tag.memory_areas()
+    for area in mem::get_all_available_mem_areas(&boot_info)
     {
-        let (b, u) = util::convert_bytes_to_any(area.size());
-        total_size += area.size();
-        println!("  start: 0x{:x}, end: 0x{:x}, size: {}{}", area.start_address(), area.end_address(), b, u);
+        println!("  start: 0x{:x}, end: 0x{:x}, length: 0x{:x}, size: {}B", area.start_address(), area.end_address(), area.size(), area.size());
     }
-    let (b, u) = util::convert_bytes_to_any(total_size);
-    println!("  total: {}{}", b, u);
+    println!("  total: {}B", mem::get_total_available_mem_size(&boot_info));
 
-    // println!("Elf sections:");
-    // let mut total = 0;
-    // for section in elf_sections_tag.sections()
-    // {
-    //     println!("  addr: 0x{:x}, size: 0x{:x}, flags: 0x{:x}", section.start_address(), section.size(), section.flags());
-    //     total += 1;
-    // }
-    // println!("  total: {}", total);
+    println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
+    println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
 
-    let (b, u) = util::convert_bytes_to_any((kernel_end - kernel_start) as u64);
-    println!("Kernel start: 0x{:x}, end: 0x{:x}, size: {}{}", kernel_start, kernel_end, b, u);
-    let (b, u) = util::convert_bytes_to_any((mboot_end - mboot_start) as u64);
-    println!("Multiboot start: 0x{:x}, end: 0x{:x}, size: {}{}", mboot_start, mboot_end, b, u);
+    let pmm = PhysicalMemoryManager::new(&boot_info);
+    println!("PMM: {:?}", pmm);
 
     println!("\n===============================");
     println!("Welcome to {}!", meta::OS_NAME);

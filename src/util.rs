@@ -26,18 +26,18 @@ pub fn convert_bytes_to_any(bytes: u64) -> (u64, &'static str)
     }
     else if bytes < 1024 * 1024
     {
-        return (convert_bytes_to_kb(bytes), "KB");
+        return (convert_bytes_to_kb(bytes), "KiB");
     }
     else if bytes < 1024 * 1024 * 1024
     {
-        return (convert_bytes_to_mb(bytes), "MB");
+        return (convert_bytes_to_mb(bytes), "MiB");
     }
     else if bytes < 1024 * 1024 * 1024 * 1024
     {
-        return (convert_bytes_to_gb(bytes), "GB");
+        return (convert_bytes_to_gb(bytes), "GiB");
     }
     else
     {
-        return (convert_bytes_to_tb(bytes), "TB");
+        return (convert_bytes_to_tb(bytes), "TiB");
     }
 }
