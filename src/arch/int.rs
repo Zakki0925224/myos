@@ -1,6 +1,6 @@
 // intel 8259A interrupt controller on PC/AT
 
-use crate::{println, arch::vga::{VGA_SCREEN, Color}, data::fifo::Fifo};
+use crate::{println, data::fifo::Fifo};
 use lazy_static::lazy_static;
 use spin::Mutex;
 

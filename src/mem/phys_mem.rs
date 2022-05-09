@@ -1,6 +1,6 @@
 use multiboot2::BootInformation;
 
-use super::{get_total_available_mem_size, get_all_available_mem_areas, get_multiboot_addr};
+use super::{get_total_available_mem_size, get_multiboot_addr};
 
 const BLOCK_SIZE: u32 = 4096;
 
@@ -36,7 +36,7 @@ impl PhysicalMemoryManager
             system_mem_blocks: blocks,
             allocated_blocks: blocks,
             free_blocks: 0,
-            memory_map: unsafe { ((e + 1) as u32) as *const u32 },
+            memory_map: ((e + 1) as u32) as *const u32,
             memory_map_size: total_mem_size - (e + 1) as u32
         }
     }

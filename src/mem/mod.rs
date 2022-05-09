@@ -1,4 +1,4 @@
-use multiboot2::{BootInformation, MemoryArea, MemoryMapTag};
+use multiboot2::{BootInformation, MemoryArea};
 
 pub mod phys_mem;
 
