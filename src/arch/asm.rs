@@ -52,6 +52,18 @@ pub fn load_gdtr(limit: i32, addr: i32)
     }
 }
 
+pub fn load_cr0() -> i32
+{
+    let mut cr0: i32;
+    unsafe { asm!("mov eax, cr0", out("eax") cr0); }
+    return cr0;
+}
+
+pub fn set_cr0(cr0: i32)
+{
+    unsafe { asm!("mov cr0, eax", in("eax") cr0); }
+}
+
 pub fn out8(port: u32, data: u8)
 {
     unsafe { asm!("out dx, al", in("edx") port, in("al") data); }

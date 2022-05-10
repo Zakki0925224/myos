@@ -44,7 +44,9 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
     println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
 
-    let pmm = PhysicalMemoryManager::new(&boot_info);
+    println!("Initializing memory manager...");
+    let mut pmm = PhysicalMemoryManager::new(&boot_info);
+    pmm.init(&boot_info);
     println!("{:?}", pmm);
 
     println!("\n===============================");

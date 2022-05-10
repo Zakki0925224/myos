@@ -25,10 +25,22 @@ pub fn get_kernel_addr(boot_info: &BootInformation) -> (u64, u64)
     return (kernel_start, kernel_end);
 }
 
+pub fn get_kernel_size(boot_info: &BootInformation) -> u64
+{
+    let (start, end) = get_kernel_addr(boot_info);
+    return end - start;
+}
+
 pub fn get_multiboot_addr(boot_info: &BootInformation) -> (u64, u64)
 {
     let multiboot_start = boot_info.start_address() as u64;
     let multiboot_end = boot_info.end_address() as u64;
 
     return (multiboot_start, multiboot_end);
+}
+
+pub fn get_multiboot_size(boot_info: &BootInformation) -> u64
+{
+    let (start, end) = get_multiboot_addr(boot_info);
+    return end - start;
 }
