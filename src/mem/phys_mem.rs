@@ -1,8 +1,10 @@
 use core::{ptr::{write_volatile, read_volatile}};
 
-use multiboot2::BootInformation;
+use multiboot2::{BootInformation, MemoryAreaType};
 
-use super::{get_total_available_mem_size, get_multiboot_addr, get_all_available_mem_areas};
+use crate::println;
+
+use super::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas};
 
 const BLOCK_SIZE: u32 = 4096;
 
@@ -46,7 +48,7 @@ impl PhysicalMemoryManager
 {
     pub fn new(boot_info: &BootInformation) -> PhysicalMemoryManager
     {
-        let total_mem_size = get_total_available_mem_size(boot_info) as u32;
+        let total_mem_size = get_total_mem_size(boot_info) as u32;
         let mem_blocks = total_mem_size / BLOCK_SIZE;
         let (_, e) = get_multiboot_addr(boot_info);
         let memmap_addr = (e + 1) as u32;
@@ -58,45 +60,50 @@ impl PhysicalMemoryManager
             allocated_blocks: mem_blocks,
             free_blocks: 0,
             memmap_addr,
-            memmap_size: mem_blocks / 32 // 32 bits (u32) per block
+            memmap_size: mem_blocks / u32::BITS // 32 bits (u32) per block
         }
     }
 
     pub fn init(&mut self, boot_info: &BootInformation)
     {
-        let all_available_mem_areas = get_all_available_mem_areas(boot_info);
-        let (_, m_e) = get_multiboot_addr(boot_info);
+        let all_mem_areas = get_all_mem_areas(boot_info);
+        let (_, e) = get_multiboot_addr(boot_info);
 
         // set all blocks to allocated
-        for i in 0..=self.mem_blocks
+        for i in 0..self.mem_blocks
         {
             self.allocate_mem_block(i as usize);
         }
 
         // set blocks of available memory to free
-        for area in all_available_mem_areas
+        let mut mb_index = 0;
+        let mut tmp = 0;
+
+        for area in all_mem_areas
         {
-            let mut i = area.start_address() as u32;
+            let mut i = area.start_address() as u32 + tmp;
 
             loop
             {
-                if i > area.end_address() as u32
+                if area.typ() != MemoryAreaType::Available
                 {
+                    mb_index = area.size() as u32 / BLOCK_SIZE;
+                    tmp = area.size() as u32 % BLOCK_SIZE;
                     break;
                 }
 
-                // skip to multiboot end addr
-                if i < m_e as u32
+                if i > area.end_address() as u32
                 {
-                    i += BLOCK_SIZE;
-                    continue;
+                    tmp = i - area.end_address() as u32;
+                    break;
                 }
 
-                let block_addr = self.phys_mem_addr_to_mem_block_index(i as u32);
-                self.unallocate_mem_block(block_addr);
-                i += BLOCK_SIZE;
-                self.free_blocks += 1;
+                self.unallocate_mem_block(mb_index as usize);
                 self.allocated_blocks -= 1;
+                self.free_blocks += 1;
+
+                mb_index += 1;
+                i += BLOCK_SIZE;
             }
         }
 
@@ -140,7 +147,7 @@ impl PhysicalMemoryManager
 
             if unsafe { read_volatile(ptr) } == u32::MAX
             {
-                i += 32;
+                i += u32::BITS as usize;
                 continue;
             }
 
@@ -150,7 +157,7 @@ impl PhysicalMemoryManager
                 break;
             }
 
-            i += 32;
+            i += u32::BITS as usize;
         }
 
         return mem_block;
@@ -204,25 +211,25 @@ impl PhysicalMemoryManager
 
     fn allocate_mem_block(&mut self, mem_block_index: usize)
     {
-        let buffer = self.memmap_ptr(mem_block_index / 32);
+        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize);
         let mut tmp = unsafe { read_volatile(buffer) };
-        tmp |= 1 << (mem_block_index % 32);
+        tmp |= 1 << (mem_block_index % u32::BITS as usize);
         unsafe { write_volatile(buffer, tmp); }
     }
 
     fn unallocate_mem_block(&mut self, mem_block_index: usize)
     {
-        let buffer = self.memmap_ptr(mem_block_index / 32);
+        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize);
         let mut tmp = unsafe { read_volatile(buffer) };
-        tmp &= !(1 << (mem_block_index % 32));
+        tmp &= !(1 << (mem_block_index % u32::BITS as usize));
         unsafe { write_volatile(buffer, tmp); }
     }
 
     fn is_allocated_mem_block(&mut self, mem_block_index: usize) -> bool
     {
-        let buffer = self.memmap_ptr(mem_block_index / 32);
+        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize as usize);
         let tmp = unsafe { read_volatile(buffer) };
-        return tmp & (1 << (mem_block_index % 32)) > 0;
+        return tmp & (1 << (mem_block_index % u32::BITS as usize)) > 0;
     }
 
     fn memmap_ptr(&mut self, offset: usize) -> &mut u32
@@ -233,10 +240,5 @@ impl PhysicalMemoryManager
         }
 
         return unsafe { &mut *((self.memmap_addr as *mut u32)).offset(offset as isize) };
-    }
-
-    fn phys_mem_addr_to_mem_block_index(&mut self, phys_mem_addr: u32) -> usize
-    {
-        return (phys_mem_addr / BLOCK_SIZE) as usize;
     }
 }

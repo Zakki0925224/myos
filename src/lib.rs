@@ -34,12 +34,12 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
         panic!("Invalid magic number: 0x{:x}", magic);
     }
 
-    println!("All available memory areas:");
-    for area in mem::get_all_available_mem_areas(&boot_info)
+    println!("All memory areas:");
+    for area in mem::get_all_mem_areas(&boot_info)
     {
-        println!("  start: 0x{:x}, end: 0x{:x}, length: 0x{:x}, size: {}B", area.start_address(), area.end_address(), area.size(), area.size());
+        println!("{:?}", area);
     }
-    println!("  total: {}B", mem::get_total_available_mem_size(&boot_info));
+    println!("  total: {}B", mem::get_total_mem_size(&boot_info));
 
     println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
     println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);

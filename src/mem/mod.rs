@@ -2,18 +2,21 @@ use multiboot2::{BootInformation, MemoryArea};
 
 pub mod phys_mem;
 
-pub fn get_total_available_mem_size(boot_info: &BootInformation) -> u64
+pub fn get_total_mem_size(boot_info: &BootInformation) -> u64
 {
-    let mem_map_tag = boot_info.memory_map_tag().expect("No memory map tag");
-    let total_size = mem_map_tag.memory_areas().map(|area| area.size()).sum();
-
-    return total_size;
+    return get_all_mem_areas(boot_info).map(|area| area.size()).sum();
 }
 
-pub fn get_all_available_mem_areas(boot_info: &BootInformation) -> impl Iterator<Item = &MemoryArea>
+pub fn get_available_mem_areas(boot_info: &BootInformation) -> impl Iterator<Item = &MemoryArea>
 {
     let mem_map_tag = boot_info.memory_map_tag().expect("No memory map tag");
     return mem_map_tag.memory_areas();
+}
+
+pub fn get_all_mem_areas(boot_info: &BootInformation) -> impl Iterator<Item = &MemoryArea>
+{
+    let mem_map_tag = boot_info.memory_map_tag().expect("No memory map tag");
+    return mem_map_tag.all_memory_areas();
 }
 
 pub fn get_kernel_addr(boot_info: &BootInformation) -> (u64, u64)
