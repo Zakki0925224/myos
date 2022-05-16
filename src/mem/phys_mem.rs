@@ -67,7 +67,6 @@ impl PhysicalMemoryManager
     pub fn init(&mut self, boot_info: &BootInformation)
     {
         let all_mem_areas = get_all_mem_areas(boot_info);
-        let (_, e) = get_multiboot_addr(boot_info);
 
         // set all blocks to allocated
         for i in 0..self.mem_blocks

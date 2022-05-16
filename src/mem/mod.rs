@@ -1,6 +1,7 @@
 use multiboot2::{BootInformation, MemoryArea};
 
 pub mod phys_mem;
+pub mod virt_mem;
 
 pub fn get_total_mem_size(boot_info: &BootInformation) -> u64
 {

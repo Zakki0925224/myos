@@ -52,16 +52,20 @@ pub fn load_gdtr(limit: i32, addr: i32)
     }
 }
 
-pub fn load_cr0() -> i32
+pub fn set_cr3(cr3: i32)
 {
-    let mut cr0: i32;
-    unsafe { asm!("mov eax, cr0", out("eax") cr0); }
-    return cr0;
+    unsafe { asm!("mov cr3, {}", in(reg) cr3); }
 }
 
-pub fn set_cr0(cr0: i32)
+pub fn enable_paging()
 {
-    unsafe { asm!("mov cr0, eax", in("eax") cr0); }
+    cli();
+    unsafe { asm!("push eax"); }
+    unsafe { asm!("mov eax, cr0"); }
+    unsafe { asm!("or eax, 0x80000000"); }
+    unsafe { asm!("mov cr0, eax"); }
+    unsafe { asm!("pop eax"); }
+    sti();
 }
 
 pub fn out8(port: u32, data: u8)

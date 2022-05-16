@@ -18,7 +18,7 @@ use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2;
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, mem::phys_mem::PhysicalMemoryManager};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, mem::{phys_mem::PhysicalMemoryManager, virt_mem::VirtualMemoryManager}};
 
 #[no_mangle]
 #[start]
@@ -37,17 +37,12 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     println!("All memory areas:");
     for area in mem::get_all_mem_areas(&boot_info)
     {
-        println!("{:?}", area);
+        println!("Start: 0x{:x}, End: 0x{:x}, Size: 0x{:x}, Type: {:?}", area.start_address(), area.end_address(), area.size(), area.typ());
     }
     println!("  total: {}B", mem::get_total_mem_size(&boot_info));
 
     println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
     println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
-
-    println!("Initializing memory manager...");
-    let mut pmm = PhysicalMemoryManager::new(&boot_info);
-    pmm.init(&boot_info);
-    println!("{:?}", pmm);
 
     println!("\n===============================");
     println!("Welcome to {}!", meta::OS_NAME);
@@ -61,6 +56,12 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     asm::sti();
 
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
+
+    let mut pmm = PhysicalMemoryManager::new(&boot_info);
+    pmm.init(&boot_info);
+    println!("{:?}", pmm);
+
+    VirtualMemoryManager::init();
 
     // #[cfg(test)]
     // test_main();
