@@ -1,10 +1,6 @@
-use core::{ptr::{write_volatile, read_volatile}};
-
+use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-
-use crate::println;
-
-use super::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas};
+use crate::{println, util::boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}};
 
 const BLOCK_SIZE: u32 = 4096;
 
@@ -60,7 +56,7 @@ impl PhysicalMemoryManager
             allocated_blocks: mem_blocks,
             free_blocks: 0,
             memmap_addr,
-            memmap_size: mem_blocks / u32::BITS // 32 bits (u32) per block
+            memmap_size: mem_blocks / u32::BITS * 4 // memmap size (byte)
         }
     }
 
@@ -106,6 +102,15 @@ impl PhysicalMemoryManager
             }
         }
 
+        // set reallocate blocks (0 ~ mmap addr + mmap size)
+        for i in 0..self.memmap_addr + self.memmap_size
+        {
+            if i % BLOCK_SIZE == 0
+            {
+                self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
+            }
+        }
+
     }
 
     pub fn get_mem_block(&mut self, index: usize) -> MemoryBlockInfo
@@ -115,7 +120,7 @@ impl PhysicalMemoryManager
             panic!("Memory block index out of range");
         }
 
-        let memmap_addr = self.memmap_addr + index as u32;
+        let memmap_addr = self.memmap_addr + index as u32 / 8;
         let mem_block_start_addr = index as u32 * BLOCK_SIZE;
         let mem_block_size = BLOCK_SIZE;
         let is_available = !self.is_allocated_mem_block(index);
@@ -130,7 +135,7 @@ impl PhysicalMemoryManager
         }
     }
 
-    pub fn get_first_free_mem_block(&mut self) -> MemoryBlockInfo
+    fn get_first_free_mem_block(&mut self) -> MemoryBlockInfo
     {
         let mut mem_block = MemoryBlockInfo::new();
         let mut i = 0;
@@ -206,6 +211,21 @@ impl PhysicalMemoryManager
     pub fn get_free_blocks(&self) -> u32
     {
         return self.free_blocks;
+    }
+
+    pub fn get_mem_block_index_from_phys_addr(&self, phys_addr: u32) -> u32
+    {
+        return phys_addr / BLOCK_SIZE;
+    }
+
+    pub fn get_memmap_start_addr(&self) -> u32
+    {
+        return self.memmap_addr;
+    }
+
+    pub fn get_memmap_end_addr(&self) -> u32
+    {
+        return self.memmap_addr + self.memmap_size;
     }
 
     fn allocate_mem_block(&mut self, mem_block_index: usize)

@@ -16,9 +16,9 @@ mod util;
 
 use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
-use multiboot2;
+use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, mem::{phys_mem::PhysicalMemoryManager, virt_mem::VirtualMemoryManager}};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::boot_info::{get_kernel_addr, get_multiboot_addr, get_total_mem_size, get_all_mem_areas}};
 
 #[no_mangle]
 #[start]
@@ -26,23 +26,13 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 {
     let boot_info = unsafe { multiboot2::load(boot_info_addr as usize).expect("Failed to load
     boot info") };
-    let (kernel_start, kernel_end) = mem::get_kernel_addr(&boot_info);
-    let (multiboot_start, multiboot_end) = mem::get_multiboot_addr(&boot_info);
 
     if magic != multiboot2::MULTIBOOT2_BOOTLOADER_MAGIC
     {
         panic!("Invalid magic number: 0x{:x}", magic);
     }
 
-    println!("All memory areas:");
-    for area in mem::get_all_mem_areas(&boot_info)
-    {
-        println!("Start: 0x{:x}, End: 0x{:x}, Size: 0x{:x}, Type: {:?}", area.start_address(), area.end_address(), area.size(), area.typ());
-    }
-    println!("  total: {}B", mem::get_total_mem_size(&boot_info));
-
-    println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
-    println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
+    debug(&boot_info);
 
     println!("\n===============================");
     println!("Welcome to {}!", meta::OS_NAME);
@@ -54,14 +44,9 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     int::init_pic();
     int::enable_mouse();
     asm::sti();
+    mem::init(&boot_info);
 
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
-
-    let mut pmm = PhysicalMemoryManager::new(&boot_info);
-    pmm.init(&boot_info);
-    println!("{:?}", pmm);
-
-    VirtualMemoryManager::init();
 
     // #[cfg(test)]
     // test_main();
@@ -88,6 +73,22 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
             asm::hlt();
         }
     }
+}
+
+fn debug(boot_info: &BootInformation)
+{
+    let (kernel_start, kernel_end) = get_kernel_addr(&boot_info);
+    let (multiboot_start, multiboot_end) = get_multiboot_addr(&boot_info);
+
+    println!("All memory areas:");
+    for area in get_all_mem_areas(&boot_info)
+    {
+        println!("Start: 0x{:x}, End: 0x{:x}, Size: 0x{:x}, Type: {:?}", area.start_address(), area.end_address(), area.size(), area.typ());
+    }
+    println!("  total: {}B", get_total_mem_size(&boot_info));
+
+    println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
+    println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
 }
 
 #[panic_handler]
