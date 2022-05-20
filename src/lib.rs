@@ -83,12 +83,13 @@ fn debug(boot_info: &BootInformation)
     println!("All memory areas:");
     for area in get_all_mem_areas(&boot_info)
     {
-        println!("Start: 0x{:x}, End: 0x{:x}, Size: 0x{:x}, Type: {:?}", area.start_address(), area.end_address(), area.size(), area.typ());
+        println!("\t0x{:x} -> 0x{:x}, Size: {}B, Type: {:?}", area.start_address(), area.end_address() - 1, area.size() - 1, area.typ());
     }
-    println!("  total: {}B", get_total_mem_size(&boot_info));
 
-    println!("Kernel start: 0x{:x}, end: 0x{:x}", kernel_start, kernel_end);
-    println!("Multiboot start: 0x{:x}, end: 0x{:x}", multiboot_start, multiboot_end);
+    println!("\ttotal: {}B", get_total_mem_size(&boot_info));
+
+    println!("Kernel 0x{:x} -> 0x{:x}, Size: {}B", kernel_start, kernel_end, kernel_start + kernel_end);
+    println!("Multiboot 0x{:x} -> 0x{:x}, Size: {}B", multiboot_start, multiboot_end, multiboot_start + multiboot_end);
 }
 
 #[panic_handler]

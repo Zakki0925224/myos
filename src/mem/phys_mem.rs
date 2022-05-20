@@ -87,9 +87,9 @@ impl PhysicalMemoryManager
                     break;
                 }
 
-                if i > area.end_address() as u32
+                if i > (area.end_address() - 1) as u32
                 {
-                    tmp = i - area.end_address() as u32;
+                    tmp = i - (area.end_address() - 1) as u32;
                     break;
                 }
 

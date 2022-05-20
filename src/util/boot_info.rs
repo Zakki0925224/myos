@@ -2,7 +2,7 @@ use multiboot2::{BootInformation, MemoryArea};
 
 pub fn get_total_mem_size(boot_info: &BootInformation) -> u64
 {
-    return get_all_mem_areas(boot_info).map(|area| area.size()).sum();
+    return get_all_mem_areas(boot_info).map(|area| area.size() - 1).sum();
 }
 
 pub fn get_available_mem_areas(boot_info: &BootInformation) -> impl Iterator<Item = &MemoryArea>
