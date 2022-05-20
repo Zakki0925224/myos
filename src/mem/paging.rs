@@ -223,16 +223,19 @@ pub fn init(phys_mem_manager: &mut PhysicalMemoryManager)
     for i in 0..1024
     {
         // init page directory
-        let ptr = unsafe { &mut *((pd_block.mem_block_start_addr + i * 4) as *mut u32) };
-        let mut pde = PageDirectoryEntry::new(ptr);
+        let phys = unsafe { &mut *((pd_block.mem_block_start_addr + i * 4) as *mut u32) };
+        let mut pde = PageDirectoryEntry::new(phys);
         pde.set_page_table_addr(i * 1024); // relative address of page table (page table index)
         pde.set_flag(PDE_FLAGS_R_W | PDE_FLAGS_R_W);
 
-        // init page table
-        let ptr = unsafe { &mut *((pt_block.mem_block_start_addr + i * 4) as *mut u32) };
-        let mut pte = PageTableEntry::new(ptr);
-        pte.set_page_frame_addr(i * 1024); // relative address of page block (page block index)
-        pte.set_flag(PTE_FLAGS_R_W | PTE_FLAGS_P);
+        for j in 0..1024
+        {
+            // init page table
+            let phys = unsafe { &mut *((pt_block.mem_block_start_addr + i * j * 4) as *mut u32) };
+            let mut pte = PageTableEntry::new(phys);
+            pte.set_page_frame_addr(i * j); // relative address of page block (page block index)
+            pte.set_flag(PTE_FLAGS_R_W | PTE_FLAGS_P);
+        }
     }
 
     // enable paging
