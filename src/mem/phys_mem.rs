@@ -2,9 +2,9 @@ use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
 use crate::{println, util::boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}};
 
-const BLOCK_SIZE: u32 = 4096;
+pub const MEM_BLOCK_SIZE: u32 = 4096;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct MemoryBlockInfo
 {
     pub memmap_addr: u32,
@@ -45,7 +45,7 @@ impl PhysicalMemoryManager
     pub fn new(boot_info: &BootInformation) -> PhysicalMemoryManager
     {
         let total_mem_size = get_total_mem_size(boot_info) as u32;
-        let mem_blocks = total_mem_size / BLOCK_SIZE;
+        let mem_blocks = total_mem_size / MEM_BLOCK_SIZE;
         let (_, e) = get_multiboot_addr(boot_info);
         let memmap_addr = (e + 1) as u32;
 
@@ -82,8 +82,8 @@ impl PhysicalMemoryManager
             {
                 if area.typ() != MemoryAreaType::Available
                 {
-                    mb_index = area.size() as u32 / BLOCK_SIZE;
-                    tmp = area.size() as u32 % BLOCK_SIZE;
+                    mb_index = area.size() as u32 / MEM_BLOCK_SIZE;
+                    tmp = area.size() as u32 % MEM_BLOCK_SIZE;
                     break;
                 }
 
@@ -98,14 +98,14 @@ impl PhysicalMemoryManager
                 self.free_blocks += 1;
 
                 mb_index += 1;
-                i += BLOCK_SIZE;
+                i += MEM_BLOCK_SIZE;
             }
         }
 
         // set reallocate blocks (0 ~ mmap addr + mmap size)
         for i in 0..self.memmap_addr + self.memmap_size
         {
-            if i % BLOCK_SIZE == 0
+            if i % MEM_BLOCK_SIZE == 0
             {
                 self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
             }
@@ -121,8 +121,8 @@ impl PhysicalMemoryManager
         }
 
         let memmap_addr = self.memmap_addr + index as u32 / 8;
-        let mem_block_start_addr = index as u32 * BLOCK_SIZE;
-        let mem_block_size = BLOCK_SIZE;
+        let mem_block_start_addr = index as u32 * MEM_BLOCK_SIZE;
+        let mem_block_size = MEM_BLOCK_SIZE;
         let is_available = !self.is_allocated_mem_block(index);
 
         return MemoryBlockInfo
@@ -193,6 +193,28 @@ impl PhysicalMemoryManager
         }
     }
 
+    pub fn clear_mem_block(&self, mem_block: MemoryBlockInfo)
+    {
+        // set 0 from memory block start address to end address
+        let mut i = mem_block.mem_block_start_addr;
+
+        loop
+        {
+            if i >= mem_block.mem_block_start_addr + mem_block.mem_block_size
+            {
+                break;
+            }
+
+            unsafe
+            {
+                let ptr = &mut *((i) as *mut u8);
+                write_volatile(ptr, 0);
+            }
+
+            i += 1;
+        }
+    }
+
     pub fn get_total_mem_size(&self) -> u32
     {
         return self.total_mem_size;
@@ -213,9 +235,9 @@ impl PhysicalMemoryManager
         return self.free_blocks;
     }
 
-    pub fn get_mem_block_index_from_phys_addr(&self, phys_addr: u32) -> u32
+    pub fn get_mem_block_index_from_phys_addr(&self, phys_addr: u32) -> usize
     {
-        return phys_addr / BLOCK_SIZE;
+        return (phys_addr / MEM_BLOCK_SIZE) as usize;
     }
 
     pub fn get_memmap_start_addr(&self) -> u32

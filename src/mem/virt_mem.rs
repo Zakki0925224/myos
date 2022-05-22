@@ -1,9 +1,13 @@
-const VA_PDE_INDEX_MASK: u32 = 0xffc00000;
-const VA_PDE_INDEX_MAX: u32 = 0x3ff;
-const VA_PDE_INDEX_SHIFT: u32 = 22;
-const VA_PTE_INDEX_MASK: u32 = 0x3ff000;
-const VA_PTE_INDEX_MAX: u32 = 0x3ff;
-const VA_PTE_INDEX_SHIFT: u32 = 12;
+use crate::{arch::asm, println};
+
+use super::paging::Paging;
+
+const VA_PD_INDEX_MASK: u32 = 0xffc00000;
+const VA_PD_INDEX_MAX: u32 = 0x3ff;
+const VA_PD_INDEX_SHIFT: u32 = 22;
+const VA_PT_INDEX_MASK: u32 = 0x3ff000;
+const VA_PT_INDEX_MAX: u32 = 0x3ff;
+const VA_PT_INDEX_SHIFT: u32 = 12;
 const VA_PAGE_OFFSET_MASK: u32 = 0xfff;
 const VA_PAGE_OFFSET_MAX: u32 = 0xfff;
 const VA_PAGE_OFFSET_SHIFT: u32 = 0;
@@ -21,16 +25,16 @@ impl VirtualAddress
         return VirtualAddress { inner };
     }
 
-    pub fn set(page_directory_entry_index: u32,
-               page_table_entry_index: u32,
-               page_offset: u32) -> VirtualAddress
+    pub fn set(mut page_directory_index: u32,
+               mut page_table_index: u32,
+               mut page_offset: u32) -> VirtualAddress
     {
-        if page_directory_entry_index > VA_PDE_INDEX_MAX
+        if page_directory_index > VA_PD_INDEX_MAX
         {
             panic!("page_directory_entry_addr is out of range");
         }
 
-        if page_table_entry_index > VA_PTE_INDEX_MAX
+        if page_table_index > VA_PT_INDEX_MAX
         {
             panic!("page_table_entry_addr is out of range");
         }
@@ -40,25 +44,41 @@ impl VirtualAddress
             panic!("page_addr is out of range");
         }
 
-        let inner = page_directory_entry_index << VA_PDE_INDEX_SHIFT |
-                        page_table_entry_index << VA_PTE_INDEX_SHIFT |
-                        page_offset << VA_PAGE_OFFSET_SHIFT;
+        // println!("PDI: {:032b}", page_directory_index);
+        // println!("PTI: {:032b}", page_table_index);
+        // println!("PO: {:032b}", page_offset);
+
+        page_directory_index <<= VA_PD_INDEX_SHIFT;
+        page_table_index <<= VA_PT_INDEX_SHIFT;
+        page_offset <<= VA_PAGE_OFFSET_SHIFT;
+
+        let inner = page_directory_index | page_table_index | page_offset;
 
         return VirtualAddress { inner };
     }
 
-    pub fn get_page_directory_entry_index(&self) -> u32
+    pub fn flash_tlb(&self)
     {
-        return (self.inner & VA_PDE_INDEX_MASK) >> VA_PDE_INDEX_SHIFT;
+        asm::invlpg(self.inner);
     }
 
-    pub fn get_page_table_entry_index(&self) -> u32
+    pub fn get_page_directory_index(&self) -> usize
     {
-        return (self.inner & VA_PTE_INDEX_MASK) >> VA_PTE_INDEX_SHIFT;
+        return ((self.inner & VA_PD_INDEX_MASK) >> VA_PD_INDEX_SHIFT) as usize;
     }
 
-    pub fn get_page_offset(&self) -> u32
+    pub fn get_page_table_index(&self) -> usize
     {
-        return (self.inner & VA_PAGE_OFFSET_MASK) >> VA_PAGE_OFFSET_SHIFT;
+        return ((self.inner & VA_PT_INDEX_MASK) >> VA_PT_INDEX_SHIFT) as usize;
+    }
+
+    pub fn get_page_offset(&self) -> usize
+    {
+        return ((self.inner & VA_PAGE_OFFSET_MASK) >> VA_PAGE_OFFSET_SHIFT) as usize;
+    }
+
+    pub fn get_addr(&self) -> u32
+    {
+        return self.inner;
     }
 }

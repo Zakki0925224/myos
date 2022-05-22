@@ -99,7 +99,6 @@ pub fn init()
 
     asm::load_gdtr(GDT_LIMIT, GDT_ADDR);
     println!("GDT initialized");
-    println!("GDT: 0x{:x} -> 0x{:x}", GDT_ADDR, GDT_ADDR + GDT_LIMIT);
 
     // init IDT
     for i in 0..=(IDT_LIMIT / 8)
@@ -119,7 +118,6 @@ pub fn init()
 
     asm::load_idtr(IDT_LIMIT, IDT_ADDR);
     println!("IDT initialized");
-    println!("IDT: 0x{:x} -> 0x{:x}", IDT_ADDR, IDT_ADDR + IDT_LIMIT);
 }
 
 pub fn get_gdt(index: i32) -> SegmentDescriptor

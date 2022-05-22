@@ -1,8 +1,10 @@
 use core::ptr::{write_volatile, read_volatile};
 
+use multiboot2::BootInformation;
+
 use crate::{arch::asm, println, print};
 
-use super::phys_mem::PhysicalMemoryManager;
+use super::{phys_mem::{PhysicalMemoryManager, MemoryBlockInfo, MEM_BLOCK_SIZE}, virt_mem::VirtualAddress};
 
 const PDE_PAGE_TABLE_ADDR_MASK: u32 = 0xfffff000;
 const PDE_PAGE_TABLE_ADDR_MAX: u32 = 0xfffff;
@@ -46,19 +48,15 @@ impl PageTableEntry
         return PageTableEntry { entry };
     }
 
-    pub fn set(&mut self, page_frame_addr: u32, flags: u32)
+    pub fn set(&mut self, mut page_frame_addr: u32, flags: u32)
     {
-        if page_frame_addr > PTE_PAGE_FRAME_ADDR_MAX
-        {
-            panic!("page_frame_addr is out of range");
-        }
-
         if flags > PTE_FLAGS_MAX
         {
             panic!("flags is out of range");
         }
 
-        unsafe { write_volatile(self.entry, page_frame_addr << PTE_PAGE_FRAME_ADDR_SHIFT | flags) };
+        page_frame_addr &= PTE_PAGE_FRAME_ADDR_MASK;
+        self.set_inner(page_frame_addr | flags);
     }
 
     pub fn set_flag(&mut self, flags: u32)
@@ -68,9 +66,9 @@ impl PageTableEntry
             panic!("flags is out of range");
         }
 
-        let mut tmp = unsafe { read_volatile(self.entry) };
+        let mut tmp = self.get_inner();
         tmp |= flags;
-        unsafe { write_volatile(self.entry, tmp) };
+        self.set_inner(tmp);
     }
 
     pub fn clear_flag(&mut self, flags: u32)
@@ -80,32 +78,27 @@ impl PageTableEntry
             panic!("flags is out of range");
         }
 
-        let mut tmp = unsafe { read_volatile(self.entry) };
+        let mut tmp = self.get_inner();
         tmp &= !flags;
-        unsafe { write_volatile(self.entry, tmp) };
+        self.set_inner(tmp);
     }
 
     pub fn get_page_frame_addr(&self) -> u32
     {
-        return unsafe { read_volatile(self.entry) } >> PTE_PAGE_FRAME_ADDR_SHIFT;
+        return self.get_inner() & PTE_PAGE_FRAME_ADDR_MASK;
     }
 
     pub fn set_page_frame_addr(&self, mut page_frame_addr: u32)
     {
-        if page_frame_addr > PTE_PAGE_FRAME_ADDR_MAX
-        {
-            panic!("page_frame_addr is out of range");
-        }
-
         page_frame_addr &= PTE_PAGE_FRAME_ADDR_MASK;
-        let mut tmp = unsafe { read_volatile(self.entry) };
+        let mut tmp = self.get_inner();
         tmp |= page_frame_addr;
-        unsafe { write_volatile(self.entry, tmp) };
+        self.set_inner(tmp);
     }
 
     pub fn get_flags(&self) -> u32
     {
-        return unsafe { read_volatile(self.entry) } & PTE_FLAGS_MASK;
+        return self.get_inner() & PTE_FLAGS_MASK;
     }
 
     pub fn get_flag_present(&self) -> bool
@@ -122,6 +115,16 @@ impl PageTableEntry
     {
         return u32::BITS;
     }
+
+    fn get_inner(&self) -> u32
+    {
+        return unsafe { read_volatile(self.entry) };
+    }
+
+    fn set_inner(&self, inner: u32)
+    {
+        unsafe { write_volatile(self.entry, inner) };
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -137,19 +140,15 @@ impl PageDirectoryEntry
         return PageDirectoryEntry { entry };
     }
 
-    pub fn set(&mut self, page_table_addr: u32, flags: u32)
+    pub fn set(&mut self, mut page_table_addr: u32, flags: u32)
     {
-        if page_table_addr > PDE_PAGE_TABLE_ADDR_MAX
-        {
-            panic!("page_frame_addr is out of range");
-        }
-
         if flags > PDE_FLAGS_MAX
         {
             panic!("flags is out of range");
         }
 
-        unsafe { write_volatile(self.entry, page_table_addr << PDE_PAGE_TABLE_ADDR_SHIFT | flags) };
+        page_table_addr &= PDE_PAGE_TABLE_ADDR_MASK;
+        self.set_inner(page_table_addr | flags);
     }
 
     pub fn set_flag(&mut self, flags: u32)
@@ -159,9 +158,9 @@ impl PageDirectoryEntry
             panic!("flags is out of range");
         }
 
-        let mut tmp = unsafe { read_volatile(self.entry) };
+        let mut tmp = self.get_inner();
         tmp |= flags;
-        unsafe { write_volatile(self.entry, tmp) };
+        self.set_inner(tmp);
     }
 
     pub fn clear_flag(&mut self, flags: u32)
@@ -171,32 +170,27 @@ impl PageDirectoryEntry
             panic!("flags is out of range");
         }
 
-        let mut tmp = unsafe { read_volatile(self.entry) };
+        let mut tmp = self.get_inner();
         tmp &= !flags;
-        unsafe { write_volatile(self.entry, tmp) };
+        self.set_inner(tmp);
     }
 
     pub fn get_page_table_addr(&self) -> u32
     {
-        return unsafe { read_volatile(self.entry) } >> PDE_PAGE_TABLE_ADDR_SHIFT;
+        return self.get_inner() & PDE_PAGE_TABLE_ADDR_MASK;
     }
 
     pub fn set_page_table_addr(&self, mut page_table_addr: u32)
     {
-        if page_table_addr > PDE_PAGE_TABLE_ADDR_MAX
-        {
-            panic!("page_table_addr is out of range");
-        }
-
         page_table_addr &= PDE_PAGE_TABLE_ADDR_MASK;
-        let mut tmp = unsafe { read_volatile(self.entry) };
+        let mut tmp = self.get_inner();
         tmp |= page_table_addr;
-        unsafe { write_volatile(self.entry, tmp) };
+        self.set_inner(tmp);
     }
 
     pub fn get_flags(&self) -> u32
     {
-        return unsafe { read_volatile(self.entry) } & PDE_FLAGS_MASK;
+        return self.get_inner() & PDE_FLAGS_MASK;
     }
 
     pub fn get_flag_present(&self) -> bool
@@ -213,34 +207,182 @@ impl PageDirectoryEntry
     {
         return u32::BITS;
     }
+
+    fn get_inner(&self) -> u32
+    {
+        return unsafe { read_volatile(self.entry) };
+    }
+
+    fn set_inner(&self, inner: u32)
+    {
+        unsafe { write_volatile(self.entry, inner) };
+    }
 }
 
-pub fn init(phys_mem_manager: &mut PhysicalMemoryManager)
+#[derive(Debug, PartialEq, Eq)]
+pub struct Paging
 {
-    let pd_block = phys_mem_manager.alloc_single_mem_block(); // allocate block for page directory memory
-    let pt_block = phys_mem_manager.alloc_single_mem_block(); // allocate block for page table memory
+    phys_mem_manager: PhysicalMemoryManager,
+    pd_block: MemoryBlockInfo,
+    pt_blocks: [MemoryBlockInfo; 1024],
+    page_directory_addr_backup: u32
+}
 
-    for i in 0..1024
+impl Paging
+{
+    pub fn new(boot_info: &BootInformation) -> Paging
     {
-        // init page directory
-        let phys = unsafe { &mut *((pd_block.mem_block_start_addr + i * 4) as *mut u32) };
-        let mut pde = PageDirectoryEntry::new(phys);
-        pde.set_page_table_addr(i * 1024); // relative address of page table (page table index)
-        pde.set_flag(PDE_FLAGS_R_W | PDE_FLAGS_R_W);
-
-        for j in 0..1024
+        let mut phys_mem_manager = PhysicalMemoryManager::new(boot_info);
+        phys_mem_manager.init(boot_info);
+        let pd_block = phys_mem_manager.alloc_single_mem_block(); // allocate block for page directory memory
+        // allocate block for page table memory
+        let mut pt_blocks = [MemoryBlockInfo::new(); 1024];
+        for i in 0..1024
         {
-            // init page table
-            let phys = unsafe { &mut *((pt_block.mem_block_start_addr + i * j * 4) as *mut u32) };
-            let mut pte = PageTableEntry::new(phys);
-            pte.set_page_frame_addr(i * j); // relative address of page block (page block index)
-            pte.set_flag(PTE_FLAGS_R_W | PTE_FLAGS_P);
+            pt_blocks[i] = phys_mem_manager.alloc_single_mem_block();
+            // clear allocated block
+            phys_mem_manager.clear_mem_block(pt_blocks[i]);
+        }
+
+        // clear allocated block
+        phys_mem_manager.clear_mem_block(pd_block);
+
+        // back up cr3 address
+        let page_directory_addr_backup = asm::get_cr3();
+
+        return Paging { page_directory_addr_backup, phys_mem_manager, pd_block, pt_blocks };
+    }
+
+    pub fn init(&mut self)
+    {
+        // mapping physical and virtual address
+        let mut i = 0;
+        loop
+        {
+            if i > self.phys_mem_manager.get_total_mem_size()
+            {
+                break;
+            }
+
+            let mut va = VirtualAddress::new(i);
+
+            // 0x0 to 0x0fffff match addresses
+            if i < 0x100000
+            {
+                va = VirtualAddress::new(i);
+            }
+            // 0x100000 to 0x3ff000
+            else if i < 0x3ff000
+            {
+                va = VirtualAddress::new(i + 0xbff00000);
+            }
+            else
+            {
+                break;
+            }
+
+            let pd_i = va.get_page_directory_index();
+            let pt_i = va.get_page_table_index();
+            let mut pte = self.get_page_table_entry(pd_i, pt_i);
+            pte.set(i, PTE_FLAGS_P | PTE_FLAGS_R_W);
+            // println!("i = 0x{:x}", i);
+            // println!("PDE{}-PTE{}: ", pd_i, pt_i);
+            // println!("\tADDR: {:020b} -> 0x{:x}", pte.get_page_frame_addr(), pte.get_page_frame_addr());
+            // println!("\tFLAG: {:012b}", pte.get_flags());
+
+            if pt_i == 0
+            {
+                let mut pde = self.get_page_directory_entry(pd_i);
+                let pt_block = self.pt_blocks.get(pd_i).unwrap();
+                //println!("PTB ADDR: {}", pt_block.mem_block_start_addr);
+                pde.set(pt_block.mem_block_start_addr, PDE_FLAGS_P | PDE_FLAGS_R_W);
+            }
+
+            i += MEM_BLOCK_SIZE;
+        }
+
+        for i in 768..769
+        {
+            let pde = self.get_page_directory_entry(i);
+            let pt = self.phys_mem_manager.get_mem_block(self.phys_mem_manager.get_mem_block_index_from_phys_addr(pde.get_page_table_addr()));
+            // TODO: self.pt_blocksの中に↑のptと同じものが見つからない
+
+            println!("PDE{}:", i);
+            println!("\tADDR: {:032b} -> 0x{:x}", pde.get_page_table_addr(), pde.get_page_table_addr());
+            println!("\tFLAG: {:032b}", pde.get_flags());
+            println!("PT: {:?}", pt);
         }
     }
 
-    // enable paging
-    asm::set_cr3(pd_block.mem_block_start_addr as i32);
-    asm::enable_paging();
+    pub fn enable(&self)
+    {
+        asm::set_cr3(self.pd_block.mem_block_start_addr);
+        asm::enable_paging();
+        println!("Paging enabled");
+    }
 
-    println!("Paging enabled");
+    // pub fn map_page(&mut self, phys_addr: u32, virt_addr: VirtualAddress)
+    // {
+    //     let pd_i = virt_addr.get_page_directory_index();
+    //     let pt_i = virt_addr.get_page_table_index();
+
+    //     let mut pde = self.get_page_directory_entry(pd_i);
+
+    //     if !pde.get_flag_present()
+    //     {
+    //         let mem_block = self.phys_mem_manager.alloc_single_mem_block();
+    //         // clear memory block
+    //         self.phys_mem_manager.clear_mem_block(mem_block);
+    //         // create new PDE
+    //         pde.set_flag(PDE_FLAGS_P | PDE_FLAGS_R_W);
+    //         pde.set_page_table_addr(mem_block.mem_block_start_addr);
+    //     }
+
+    //     // create new PTE
+    //     let mut pte = self.get_page_table_entry(pd_i, pt_i);
+    //     pte.set_flag(PTE_FLAGS_P | PTE_FLAGS_R_W);
+    //     pte.set_page_frame_addr(phys_addr);
+    // }
+
+    pub fn alloc_single_page(&mut self) -> MemoryBlockInfo
+    {
+        let mb_info = self.phys_mem_manager.alloc_single_mem_block();
+        let pd_i = self.get_page_directory_index(mb_info.mem_block_index);
+        let pt_i = self.get_page_table_index(mb_info.mem_block_index);
+        let mut pte = self.get_page_table_entry(pd_i, pt_i);
+        pte.set(mb_info.mem_block_start_addr, PTE_FLAGS_P);
+
+        return mb_info;
+    }
+
+    pub fn unalloc_single_page(&mut self, mem_block: MemoryBlockInfo)
+    {
+        self.phys_mem_manager.unalloc_single_mem_block(mem_block);
+        let pd_i = self.get_page_directory_index(mem_block.mem_block_index);
+        let pt_i = self.get_page_table_index(mem_block.mem_block_index);
+        let mut pte = self.get_page_table_entry(pd_i, pt_i);
+        pte.clear_flag(PTE_FLAGS_P);
+    }
+
+    fn get_page_directory_entry(&self, index: usize) -> PageDirectoryEntry
+    {
+        let phys = unsafe { &mut *((self.pd_block.mem_block_start_addr + index as u32 * 4) as *mut u32) };
+        return PageDirectoryEntry::new(phys);
+    }
+
+    fn get_page_table_entry(&self, page_directory_index: usize, page_table_index: usize) -> PageTableEntry
+    {
+        let phys = unsafe { &mut *((self.pd_block.mem_block_start_addr + (page_directory_index * page_table_index) as u32 * 4) as *mut u32) };
+        return PageTableEntry::new(phys);
+    }
+
+    fn get_page_directory_index(&self, mem_block_index: usize) -> usize
+    {
+        return mem_block_index / 1024 % 1024;
+    }
+
+    fn get_page_table_index(&self, mem_block_index: usize) -> usize
+    {
+        return mem_block_index % 1024;
+    }
 }

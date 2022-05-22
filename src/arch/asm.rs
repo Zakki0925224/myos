@@ -52,9 +52,23 @@ pub fn load_gdtr(limit: i32, addr: i32)
     }
 }
 
-pub fn set_cr3(cr3: i32)
+pub fn set_cr3(cr3: u32)
 {
     unsafe { asm!("mov cr3, {}", in(reg) cr3); }
+}
+
+pub fn get_cr3() -> u32
+{
+    let mut cr3 = 0;
+    unsafe { asm!("mov {}, cr3", out(reg) cr3); }
+    return cr3;
+}
+
+pub fn invlpg(virt_addr: u32)
+{
+    cli();
+    unsafe { asm!("invlpg {}", in(reg) virt_addr); }
+    sti();
 }
 
 pub fn enable_paging()

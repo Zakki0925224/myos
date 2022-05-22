@@ -32,21 +32,22 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
         panic!("Invalid magic number: 0x{:x}", magic);
     }
 
-    debug(&boot_info);
+    // debug(&boot_info);
 
-    println!("\n===============================");
-    println!("Welcome to {}!", meta::OS_NAME);
-    println!("Description: {}", meta::OS_DESCRIPTION);
-    println!("Version: {}", meta::OS_VERSION);
-    println!("Author: {}", meta::OS_AUTHORS);
+    // println!("\n===============================");
+    // println!("Welcome to {}!", meta::OS_NAME);
+    // println!("Description: {}", meta::OS_DESCRIPTION);
+    // println!("Version: {}", meta::OS_VERSION);
+    // println!("Author: {}", meta::OS_AUTHORS);
 
     sgm::init();
     int::init_pic();
     int::enable_mouse();
-    asm::sti();
     mem::init(&boot_info);
+    loop {};
 
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
+    asm::sti();
 
     // #[cfg(test)]
     // test_main();
