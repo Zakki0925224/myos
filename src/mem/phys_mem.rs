@@ -93,7 +93,7 @@ impl PhysicalMemoryManager
                     break;
                 }
 
-                self.unallocate_mem_block(mb_index as usize);
+                self.deallocate_mem_block(mb_index as usize);
                 self.allocated_blocks -= 1;
                 self.free_blocks += 1;
 
@@ -183,11 +183,11 @@ impl PhysicalMemoryManager
         return self.get_mem_block(free_mb.mem_block_index);
     }
 
-    pub fn unalloc_single_mem_block(&mut self, mem_block: MemoryBlockInfo)
+    pub fn dealloc_single_mem_block(&mut self, mem_block: MemoryBlockInfo)
     {
         if !mem_block.is_available
         {
-            self.unallocate_mem_block(mem_block.mem_block_index);
+            self.deallocate_mem_block(mem_block.mem_block_index);
             self.free_blocks += 1;
             self.allocated_blocks -= 1;
         }
@@ -258,7 +258,7 @@ impl PhysicalMemoryManager
         unsafe { write_volatile(buffer, tmp); }
     }
 
-    fn unallocate_mem_block(&mut self, mem_block_index: usize)
+    fn deallocate_mem_block(&mut self, mem_block_index: usize)
     {
         let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize);
         let mut tmp = unsafe { read_volatile(buffer) };
