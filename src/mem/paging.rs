@@ -267,19 +267,19 @@ impl Paging
             let mut va = VirtualAddress::new(i);
 
             // 0x0 to 0x0fffff match addresses
-            if i < 0x100000
-            {
-                va = VirtualAddress::new(i);
-            }
-            // 0x100000 to 0x3ff000
-            else if i < 0x3ff000
-            {
-                va = VirtualAddress::new(i + 0xbff00000);
-            }
-            else
-            {
-                break;
-            }
+            // if i < 0x100000
+            // {
+            //     va = VirtualAddress::new(i);
+            // }
+            // // 0x100000 to 0x3ff000
+            // else if i < 0x3ff000
+            // {
+            //     va = VirtualAddress::new(i + 0xbff00000);
+            // }
+            // else
+            // {
+            //     break;
+            // }
 
             let pd_i = va.get_page_directory_index();
             let pt_i = va.get_page_table_index();
@@ -295,6 +295,21 @@ impl Paging
 
             i += MEM_BLOCK_SIZE;
         }
+
+        // for i in 0..1024*1024
+        // {
+        //     if i % 1024 == 0
+        //     {
+        //         let index = self.get_page_directory_index(i);
+        //         let pde = self.get_page_directory_entry(index);
+        //         println!("PDE{}: PT addr: {:32b} -> 0x{:x}", index, pde.get_page_table_addr(), pde.get_page_table_addr());
+        //     }
+
+        //     let pd_i = self.get_page_directory_index(i);
+        //     let pt_i = self.get_page_table_index(i);
+        //     let pte = self.get_page_table_entry(pd_i, pt_i);
+        //     println!("\tPTE({})-{}: PF addr: {:32b} -> 0x{:x}", pd_i, pt_i, pte.get_page_frame_addr(), pte.get_page_frame_addr());
+        // }
     }
 
     pub fn enable(&self)
