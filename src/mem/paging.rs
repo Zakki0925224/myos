@@ -285,32 +285,15 @@ impl Paging
             let pt_i = va.get_page_table_index();
             let mut pte = self.get_page_table_entry(pd_i, pt_i);
             pte.set(i, PTE_FLAGS_P | PTE_FLAGS_R_W);
-            // println!("i = 0x{:x}", i);
-            // println!("PDE{}-PTE{}: ", pd_i, pt_i);
-            // println!("\tADDR: {:020b} -> 0x{:x}", pte.get_page_frame_addr(), pte.get_page_frame_addr());
-            // println!("\tFLAG: {:012b}", pte.get_flags());
 
             if pt_i == 0
             {
                 let mut pde = self.get_page_directory_entry(pd_i);
                 let pt_block = self.pt_blocks.get(pd_i).unwrap();
-                //println!("PTB ADDR: {}", pt_block.mem_block_start_addr);
                 pde.set(pt_block.mem_block_start_addr, PDE_FLAGS_P | PDE_FLAGS_R_W);
             }
 
             i += MEM_BLOCK_SIZE;
-        }
-
-        for i in 768..769
-        {
-            let pde = self.get_page_directory_entry(i);
-            let pt = self.phys_mem_manager.get_mem_block(self.phys_mem_manager.get_mem_block_index_from_phys_addr(pde.get_page_table_addr()));
-            // TODO: self.pt_blocksの中に↑のptと同じものが見つからない
-
-            println!("PDE{}:", i);
-            println!("\tADDR: {:032b} -> 0x{:x}", pde.get_page_table_addr(), pde.get_page_table_addr());
-            println!("\tFLAG: {:032b}", pde.get_flags());
-            println!("PT: {:?}", pt);
         }
     }
 
@@ -372,7 +355,9 @@ impl Paging
 
     fn get_page_table_entry(&self, page_directory_index: usize, page_table_index: usize) -> PageTableEntry
     {
-        let phys = unsafe { &mut *((self.pd_block.mem_block_start_addr + (page_directory_index * page_table_index) as u32 * 4) as *mut u32) };
+        let pde = self.get_page_directory_entry(page_directory_index);
+        let pt_addr = pde.get_page_table_addr();
+        let phys = unsafe { &mut *((pt_addr + page_table_index as u32 * 4) as *mut u32) };
         return PageTableEntry::new(phys);
     }
 
