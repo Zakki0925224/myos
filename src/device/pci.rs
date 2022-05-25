@@ -1,3 +1,5 @@
+use pci_ids::Vendors;
+
 use crate::{arch::asm, println};
 
 const PCI_CS32_DEVICE_NOT_EXIST: u32 = 0xffffffff;
@@ -27,9 +29,25 @@ const PCI_CS32_INTERRUPT_LINE_MASK: u32 = 0x000000ff;
 pub fn init()
 {
     let mut pcs = PciConfigSpace::new();
-    pcs.get(0, 3, 0).expect("PCI device not found");
+    pcs.get(0, 0, 0).expect("PCI device not found");
 
-    println!("{:?}", pcs);
+    for i in 0..255
+    {
+        for j in 0..32
+        {
+            for k in 0..8
+            {
+                let p = pcs.get(i, j, k);
+                if p != None
+                {
+                    println!("Bus: {}, Device: {}, Func: {}", i, j, k);
+                    println!("Vendor Name: {}", pcs.get_vendor_name());
+                    println!("Device Name: {}", pcs.get_device_name());
+                    println!("================================");
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -107,6 +125,56 @@ impl PciConfigSpace
         }
     }
 
+    pub fn get_vendor_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        if !self.is_exist()
+        {
+            panic!("PCI device not found");
+        }
+
+        for vendor in Vendors::iter()
+        {
+            if vendor.id() == self.vendor_id
+            {
+                name = vendor.name();
+                break;
+            }
+        }
+
+        return name;
+    }
+
+    pub fn get_device_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        if !self.is_exist()
+        {
+            panic!("PCI device not found");
+        }
+
+        for vendor in Vendors::iter()
+        {
+            if vendor.id() == self.vendor_id
+            {
+                for device in vendor.devices()
+                {
+                    if device.id() == self.device_id
+                    {
+                        name = device.name();
+                        break;
+                    }
+                }
+
+                break;
+            }
+        }
+
+        return name;
+    }
+
     fn set_config(&mut self)
     {
         self.device_id = ((self.raw_data[0] & PCI_CS32_DEVICE_ID_MASK) >> 16) as u16;
@@ -175,22 +243,6 @@ impl PciConfigSpace
 
     fn is_exist(&self) -> bool
     {
-        let mut zero_cnt = 0;
-        let mut not_exist_cnt = 0;
-
-        for data in self.raw_data
-        {
-            if data == 0
-            {
-                zero_cnt += 1;
-            }
-
-            if data == PCI_CS32_DEVICE_NOT_EXIST
-            {
-                not_exist_cnt += 1;
-            }
-        }
-
-        return zero_cnt != 16 && not_exist_cnt != 16;
+        return self.raw_data[0] != 0 && self.raw_data[0] != PCI_CS32_DEVICE_NOT_EXIST
     }
 }
