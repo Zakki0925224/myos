@@ -264,7 +264,7 @@ impl Paging
                 break;
             }
 
-            let mut va = VirtualAddress::new(i);
+            let va = VirtualAddress::new(i);
 
             // 0x0 to 0x0fffff match addresses
             // if i < 0x100000
