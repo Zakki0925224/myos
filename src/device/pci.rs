@@ -1,81 +1,287 @@
-use pci_ids::Vendors;
+use pci_ids::{Vendors, Classes};
 
 use crate::{arch::asm, println};
 
 const PCI_CS32_DEVICE_NOT_EXIST: u32 = 0xffffffff;
 
-const PCI_CS32_DEVICE_ID_MASK: u32 = 0xffff0000;
-const PCI_CS32_VENDOR_ID_MASK: u32 = 0x0000ffff;
-const PCI_CS32_STATUS_MASK: u32 = 0xffff0000;
-const PCI_CS32_COMMAND_MASK: u32 = 0x0000ffff;
-const PCI_CS32_CLASS_CODE_MASK: u32 = 0xffffff0;
-const PCI_CS32_REVISION_ID_MASK: u32 = 0x000000f;
-const PCI_CS32_BIST_MASK: u32 = 0xff000000;
-const PCI_CS32_HEADER_TYPE_MASK: u32 = 0xff0000;
-const PCI_CS32_LATENCY_TIMER_MASK: u32 = 0xff00;
-const PCI_CS32_CACHE_LINE_SIZE_MASK: u32 = 0x000000ff;
-const PCI_CS32_BASE_ADDR_REGISTER_MASK: u32 = 0xffffffff;
-const PCI_CS32_CARDBUS_CIS_POINTER_MASK: u32 = 0xffffffff;
-const PCI_CS32_SUBSYSTEM_ID_MASK: u32 = 0xffff0000;
-const PCI_CS32_SUBSYSTEM_VENDOR_ID_MASK: u32 = 0x0000ffff;
-const PCI_CS32_EXPANSION_ROM_BASE_ADDR_MASK: u32 = 0xffffffff;
-const PCI_CS32_CAPABILITIES_POINTER_MASK: u32 = 0x000000ff;
-const PCI_CS32_MAX_LAT_MASK: u32 = 0xff000000;
-const PCI_CS32_MIN_GNT_MASK: u32 = 0x00ff0000;
-const PCI_CS32_INTERRUPT_PIN_MASK: u32 = 0x0000ff00;
-const PCI_CS32_INTERRUPT_LINE_MASK: u32 = 0x000000ff;
-
-
 pub fn init()
 {
-    let mut pcs = PciConfigSpace::new();
-    pcs.get(0, 0, 0).expect("PCI device not found");
+    let pci = Pci::new();
 
-    for i in 0..255
+    for device in pci.get_devices()
     {
-        for j in 0..32
+        if device.is_exist()
         {
-            for k in 0..8
+            println!("==Bus: {}, Device: {}, Function: {}==", device.get_bus_num(), device.get_device_num(), device.get_func_num());
+            println!("Device name: {}, Rev: {}", device.get_device_name(), device.get_revision_id());
+            println!("Vendor name: {}", device.get_vendor_name());
+            println!("Base class: {}, Sub class: {}, Pif: {}", device.get_class_name(), device.get_subclass_name(), device.get_program_interface_class_name());
+            println!("Type: {:?}", device.get_header_type());
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+struct Pci
+{
+    devices: [PciDevice; 256]
+}
+
+impl Pci
+{
+    pub fn new() -> Pci
+    {
+        let mut devices = [PciDevice::new(); 256];
+        let mut device_cnt = 0;
+
+        for i in 0..=255
+        {
+            for j in 0..32
             {
-                let p = pcs.get(i, j, k);
-                if p != None
+                for k in 0..8
                 {
-                    println!("Bus: {}, Device: {}, Func: {}", i, j, k);
-                    println!("Vendor Name: {}", pcs.get_vendor_name());
-                    println!("Device Name: {}", pcs.get_device_name());
-                    println!("================================");
+                    devices[device_cnt].set(i, j, k);
+                    if devices[device_cnt].is_exist()
+                    {
+                        device_cnt += 1;
+                    }
                 }
             }
         }
+
+        return Pci { devices };
+    }
+
+    pub fn get_devices(&self) -> [PciDevice; 256]
+    {
+        return self.devices;
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PciHeaderType
+{
+    StandardPci,
+    PciToPciBridge,
+    CardBusBridge
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct PciDevice
+{
+    config_space: PciConfigSpace,
+    bus: u8,
+    device: u8,
+    func: u8
+}
+
+impl PciDevice
+{
+    pub fn new() -> PciDevice
+    {
+        let config_space = PciConfigSpace::new();
+        return PciDevice
+        {
+            config_space,
+            bus: 0,
+            device: 0,
+            func: 0
+        }
+    }
+
+    pub fn set(&mut self, bus: u8, device: u8, func: u8)
+    {
+        self.config_space.get(bus, device, func);
+        self.bus = bus;
+        self.device = device;
+        self.func = func;
+    }
+
+    pub fn get_bus_num(&self) -> u8
+    {
+        return self.bus;
+    }
+
+    pub fn get_device_num(&self) -> u8
+    {
+        return self.device;
+    }
+
+    pub fn get_func_num(&self) -> u8
+    {
+        return self.func;
+    }
+
+    pub fn is_exist(&self) -> bool
+    {
+        return self.config_space.is_exist();
+    }
+
+    pub fn get_device_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        let vendor = Vendors::iter().find(|v| v.id() == self.get_vendor_id());
+
+        if vendor == None
+        {
+            return name;
+        }
+
+        let device = vendor.unwrap().devices().find(|d| d.id() == self.get_device_id());
+
+        if device == None
+        {
+            return name;
+        }
+
+        return device.unwrap().name();
+    }
+
+    pub fn get_vendor_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        let vendor = Vendors::iter().find(|v| v.id() == self.get_vendor_id());
+
+        if vendor == None
+        {
+            return name;
+        }
+
+        return vendor.unwrap().name();
+    }
+
+    pub fn get_device_id(&self) -> u16
+    {
+        return (self.config_space.raw_data[0] >> 16) as u16;
+    }
+
+    pub fn get_vendor_id(&self) -> u16
+    {
+        return self.config_space.raw_data[0] as u16;
+    }
+
+    pub fn get_revision_id(&self) -> u8
+    {
+        return self.config_space.raw_data[2] as u8;
+    }
+
+    pub fn get_program_interface_class_code(&self) -> u8
+    {
+        return (self.config_space.raw_data[2] >> 8) as u8
+    }
+
+    pub fn get_sub_class_code(&self) -> u8
+    {
+        return (self.config_space.raw_data[2] >> 16) as u8;
+    }
+
+    pub fn get_base_class_code(&self) -> u8
+    {
+        return (self.config_space.raw_data[2] >> 24) as u8;
+    }
+
+    pub fn get_class_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        let class = Classes::iter().find(|c| c.id() == self.get_base_class_code());
+
+        if class == None
+        {
+            return name;
+        }
+
+        return class.unwrap().name();
+    }
+
+    pub fn get_subclass_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        let class = Classes::iter().find(|c| c.id() == self.get_base_class_code());
+
+        if class == None
+        {
+            return name;
+        }
+
+        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_sub_class_code());
+
+        if subclass == None
+        {
+            return name;
+        }
+
+        return subclass.unwrap().name();
+    }
+
+    pub fn get_program_interface_class_name(&self) -> &str
+    {
+        let mut name = "Unknown";
+
+        let class = Classes::iter().find(|c| c.id() == self.get_base_class_code());
+
+        if class == None
+        {
+            return name;
+        }
+
+        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_sub_class_code());
+
+        if subclass == None
+        {
+            return name;
+        }
+
+        let prog_if = subclass.unwrap().prog_ifs().find(|pif| pif.id() == self.get_program_interface_class_code());
+
+        if prog_if == None
+        {
+            return name;
+        }
+
+        return prog_if.unwrap().name();
+    }
+
+    pub fn get_chache_line_size(&self) -> u8
+    {
+        return self.config_space.raw_data[3] as u8;
+    }
+
+    pub fn get_latency_timer(&self) -> u8
+    {
+        return (self.config_space.raw_data[3] >> 8) as u8;
+    }
+
+    pub fn get_header_type(&self) -> PciHeaderType
+    {
+        let tp = (self.config_space.raw_data[3] >> 16) as u8;
+
+        match tp
+        {
+            1 => return PciHeaderType::PciToPciBridge,
+            2 => return PciHeaderType::CardBusBridge,
+            _ => return PciHeaderType::StandardPci
+        }
+    }
+
+    pub fn get_bist_register(&self) -> u8
+    {
+        return (self.config_space.raw_data[3] >> 24) as u8;
+    }
+
+    pub fn is_multi_function_device(&self) -> bool
+    {
+        return ((self.config_space.raw_data[3] >> 16) as u8 & 0x80) != 0;
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 struct PciConfigSpace
 {
-    raw_data: [u32; 16],
-    pub device_id: u16,
-    pub vendor_id: u16,
-    pub status: u16,
-    pub command: u16,
-    pub class_code_high: u8,
-    pub class_code_middle: u8,
-    pub class_code_low: u8,
-    pub revision_id: u8,
-    pub bist: u8,
-    pub header_type: u8,
-    pub latency_timer: u8,
-    pub cache_line_size: u8,
-    pub base_addr_registers: [u32; 6],
-    pub cardbus_cis_pointer: u32,
-    pub subsystem_id: u16,
-    pub subsystem_vendor_id: u16,
-    pub expansion_rom_base_addr: u32,
-    pub capabilities_pointer: u8,
-    pub max_lat: u8,
-    pub min_gnt: u8,
-    pub interrupt_pin: u8,
-    pub interrupt_line: u8
+    raw_data: [u32; 16]
 }
 
 impl PciConfigSpace
@@ -84,29 +290,7 @@ impl PciConfigSpace
     {
         return PciConfigSpace
         {
-            raw_data: [0; 16],
-            device_id: 0,
-            vendor_id: 0,
-            status: 0,
-            command: 0,
-            class_code_high: 0,
-            class_code_middle: 0,
-            class_code_low: 0,
-            revision_id: 0,
-            bist: 0,
-            header_type: 0,
-            latency_timer: 0,
-            cache_line_size: 0,
-            base_addr_registers: [0; 6],
-            cardbus_cis_pointer: 0,
-            subsystem_id: 0,
-            subsystem_vendor_id: 0,
-            expansion_rom_base_addr: 0,
-            capabilities_pointer: 0,
-            max_lat: 0,
-            min_gnt: 0,
-            interrupt_pin: 0,
-            interrupt_line: 0
+            raw_data: [0; 16]
         };
     }
 
@@ -116,95 +300,12 @@ impl PciConfigSpace
 
         if self.is_exist()
         {
-            self.set_config();
             return Some(self);
         }
         else
         {
             return None;
         }
-    }
-
-    pub fn get_vendor_name(&self) -> &str
-    {
-        let mut name = "Unknown";
-
-        if !self.is_exist()
-        {
-            panic!("PCI device not found");
-        }
-
-        for vendor in Vendors::iter()
-        {
-            if vendor.id() == self.vendor_id
-            {
-                name = vendor.name();
-                break;
-            }
-        }
-
-        return name;
-    }
-
-    pub fn get_device_name(&self) -> &str
-    {
-        let mut name = "Unknown";
-
-        if !self.is_exist()
-        {
-            panic!("PCI device not found");
-        }
-
-        for vendor in Vendors::iter()
-        {
-            if vendor.id() == self.vendor_id
-            {
-                for device in vendor.devices()
-                {
-                    if device.id() == self.device_id
-                    {
-                        name = device.name();
-                        break;
-                    }
-                }
-
-                break;
-            }
-        }
-
-        return name;
-    }
-
-    fn set_config(&mut self)
-    {
-        self.device_id = ((self.raw_data[0] & PCI_CS32_DEVICE_ID_MASK) >> 16) as u16;
-        self.vendor_id = (self.raw_data[0] & PCI_CS32_VENDOR_ID_MASK) as u16;
-        self.status = ((self.raw_data[1] & PCI_CS32_STATUS_MASK) >> 16) as u16;
-        self.command = (self.raw_data[1] & PCI_CS32_COMMAND_MASK) as u16;
-        self.class_code_high = ((self.raw_data[2] & PCI_CS32_CLASS_CODE_MASK) >> 24) as u8;
-        self.class_code_middle = ((self.raw_data[2] & PCI_CS32_CLASS_CODE_MASK) >> 16) as u8;
-        self.class_code_low = ((self.raw_data[2] & PCI_CS32_CLASS_CODE_MASK) >> 8) as u8;
-        self.revision_id = (self.raw_data[2] & PCI_CS32_REVISION_ID_MASK) as u8;
-        self.bist = ((self.raw_data[3] & PCI_CS32_BIST_MASK) >> 24) as u8;
-        self.header_type = ((self.raw_data[3] & PCI_CS32_HEADER_TYPE_MASK) >> 16) as u8;
-        self.latency_timer = ((self.raw_data[3] & PCI_CS32_LATENCY_TIMER_MASK) >> 8) as u8;
-        self.cache_line_size = (self.raw_data[3] & PCI_CS32_CACHE_LINE_SIZE_MASK) as u8;
-        self.base_addr_registers[0] = self.raw_data[4];
-        self.base_addr_registers[1] = self.raw_data[5];
-        self.base_addr_registers[2] = self.raw_data[6];
-        self.base_addr_registers[3] = self.raw_data[7];
-        self.base_addr_registers[4] = self.raw_data[8];
-        self.base_addr_registers[5] = self.raw_data[9];
-        self.cardbus_cis_pointer = self.raw_data[10];
-        self.subsystem_id = ((self.raw_data[11] & PCI_CS32_SUBSYSTEM_ID_MASK) >> 16) as u16;
-        self.subsystem_vendor_id = (self.raw_data[11] & PCI_CS32_SUBSYSTEM_VENDOR_ID_MASK) as u16;
-        self.expansion_rom_base_addr = self.raw_data[12];
-        self.capabilities_pointer = (self.raw_data[13] & PCI_CS32_CAPABILITIES_POINTER_MASK) as u8;
-        self.max_lat = ((self.raw_data[15] & PCI_CS32_MAX_LAT_MASK) >> 24) as u8;
-        self.min_gnt = ((self.raw_data[15] & PCI_CS32_MIN_GNT_MASK) >> 16) as u8;
-        self.interrupt_pin = ((self.raw_data[15] & PCI_CS32_INTERRUPT_PIN_MASK) >> 8) as u8;
-        self.interrupt_line = (self.raw_data[15] & PCI_CS32_INTERRUPT_LINE_MASK) as u8;
-
     }
 
     fn read_pci_config(&self, bus: u8, device: u8, func: u8, offset: u32) -> u32
