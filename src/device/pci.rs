@@ -17,6 +17,8 @@ pub fn init()
             println!("Vendor name: {}", device.get_vendor_name());
             println!("Base class: {}, Sub class: {}, Pif: {}", device.get_class_name(), device.get_subclass_name(), device.get_program_interface_class_name());
             println!("Type: {:?}", device.get_header_type());
+            println!("Debug:");
+            device.debug();
         }
     }
 }
@@ -275,6 +277,26 @@ impl PciDevice
     pub fn is_multi_function_device(&self) -> bool
     {
         return ((self.config_space.raw_data[3] >> 16) as u8 & 0x80) != 0;
+    }
+
+    pub fn debug(&self)
+    {
+        println!("[D--|V--]{:032b}", self.config_space.raw_data[0]);
+        println!("[S|--C--]{:032b}", self.config_space.raw_data[1]);
+        println!("[C----|R]{:032b}", self.config_space.raw_data[2]);
+        println!("[B|H|L|C]{:032b}", self.config_space.raw_data[3]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[4]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[5]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[6]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[7]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[8]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[9]);
+        println!("[-CCISP-]{:032b}", self.config_space.raw_data[10]);
+        println!("[S---SV-]{:032b}", self.config_space.raw_data[11]);
+        println!("[EROMBAR]{:032b}", self.config_space.raw_data[12]);
+        println!("[RS--|CP]{:032b}", self.config_space.raw_data[13]);
+        println!("[--RS---]{:032b}", self.config_space.raw_data[14]);
+        println!("[L|G|P|L]{:032b}", self.config_space.raw_data[15]);
     }
 }
 
