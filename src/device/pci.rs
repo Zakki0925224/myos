@@ -1,6 +1,6 @@
 use pci_ids::{Vendors, Classes};
 
-use crate::{arch::asm, println};
+use crate::{arch::asm, println, print};
 
 const PCI_CS32_DEVICE_NOT_EXIST: u32 = 0xffffffff;
 
@@ -12,13 +12,22 @@ pub fn init()
     {
         if device.is_exist()
         {
-            println!("==Bus: {}, Device: {}, Function: {}==", device.get_bus_num(), device.get_device_num(), device.get_func_num());
-            println!("Device name: {}, Rev: {}", device.get_device_name(), device.get_revision_id());
-            println!("Vendor name: {}", device.get_vendor_name());
-            println!("Base class: {}, Sub class: {}, Pif: {}", device.get_class_name(), device.get_subclass_name(), device.get_program_interface_class_name());
-            println!("Type: {:?}", device.get_header_type());
-            println!("Debug:");
-            device.debug();
+            // println!("[PCI{}:{}.{}] {}: {} (rev{})", device.get_bus_num(), device.get_device_num(), device.get_func_num(), device.get_class_name(), device.get_device_name(), device.get_revision_id());
+            // println!("BAR Type: {:?}", device.get_base_addr_reg_type());
+
+            // if device.get_base_addr_reg_type() == BaseAddressRegisterType::MemorySpace
+            // {
+            //     println!("BAR Mem type: {:?}", device.get_base_addr_mem_type());
+            // }
+            // if device.get_base_addr_reg_type() != BaseAddressRegisterType::NoSpace
+            // {
+            //     println!("BAR Base addr: 0x{:x}", device.get_base_addr());
+            // }
+
+            //println!("INT Line: {}", device.get_interrupt_line());
+            //println!("INT Pin: {}", device.get_interrupt_pin());
+            //device.dump();
+            device.dump_lspci_x();
         }
     }
 }
@@ -26,7 +35,8 @@ pub fn init()
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 struct Pci
 {
-    devices: [PciDevice; 256]
+    devices: [PciDevice; 256],
+    device_cnt: usize
 }
 
 impl Pci
@@ -51,12 +61,17 @@ impl Pci
             }
         }
 
-        return Pci { devices };
+        return Pci { devices, device_cnt };
     }
 
     pub fn get_devices(&self) -> [PciDevice; 256]
     {
         return self.devices;
+    }
+
+    pub fn get_device_cnt(&self) -> usize
+    {
+        return self.device_cnt;
     }
 }
 
@@ -66,6 +81,23 @@ enum PciHeaderType
     StandardPci,
     PciToPciBridge,
     CardBusBridge
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BaseAddressRegisterType
+{
+    MemorySpace,
+    IOSpace,
+    NoSpace
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BaseAddressRegisterMemoryType
+{
+    Bit32Space,
+    Bit64Space,
+    Bit32SpaceUpTo1MB,
+    Bit64SpaceUpTo1MB
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -269,9 +301,152 @@ impl PciDevice
         }
     }
 
+    pub fn get_base_addr_reg_type(&self) -> BaseAddressRegisterType
+    {
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            panic!("Unsupported header type");
+        }
+
+        let config_space = self.config_space.raw_data;
+        let mut bar_type = BaseAddressRegisterType::NoSpace;
+
+        for i in 4..10
+        {
+            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
+            {
+                continue;
+            }
+
+            // bit 0
+            if (config_space[i] & 0x1) != 0
+            {
+                bar_type = BaseAddressRegisterType::IOSpace;
+            }
+            else
+            {
+                bar_type = BaseAddressRegisterType::MemorySpace;
+            }
+
+            break;
+        }
+
+        return bar_type;
+    }
+
+    pub fn get_base_addr_mem_type(&self) -> BaseAddressRegisterMemoryType
+    {
+        if self.get_base_addr_reg_type() != BaseAddressRegisterType::MemorySpace
+        {
+            panic!("Base address register type isn't Memory Space");
+        }
+
+        let config_space = self.config_space.raw_data;
+        let mut mem_type = BaseAddressRegisterMemoryType::Bit32Space;
+
+        for i in 4..10
+        {
+            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
+            {
+                continue;
+            }
+
+            let data = (config_space[i] as u8) & 0x6;
+
+            // bit 1~2
+            if data == 0
+            {
+                mem_type = BaseAddressRegisterMemoryType::Bit32Space;
+            }
+            else if data == 0x2
+            {
+                mem_type = BaseAddressRegisterMemoryType::Bit32SpaceUpTo1MB;
+            }
+            else if data == 0x4
+            {
+                mem_type = BaseAddressRegisterMemoryType::Bit64Space;
+            }
+            else if data == 0x6
+            {
+                mem_type = BaseAddressRegisterMemoryType::Bit64SpaceUpTo1MB;
+            }
+            else
+            {
+                panic!("Invalid base address register memory type");
+            }
+
+            break;
+        }
+
+        return mem_type;
+    }
+
+    pub fn get_base_addr(&self) -> usize
+    {
+        let header_type = self.get_header_type();
+        let config_space = self.config_space.raw_data;
+        let base_addr_reg_type = self.get_base_addr_reg_type();
+
+        if header_type != PciHeaderType::StandardPci
+        {
+            panic!("Unsupported header type");
+        }
+
+        if base_addr_reg_type == BaseAddressRegisterType::NoSpace
+        {
+            panic!("Device hasn't memory space");
+        }
+
+        let mut addr = 0;
+
+        for i in 4..10
+        {
+            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
+            {
+                continue;
+            }
+
+            if base_addr_reg_type == BaseAddressRegisterType::MemorySpace
+            {
+                let base_addr_mem_type = self.get_base_addr_mem_type();
+
+                match base_addr_mem_type
+                {
+                    BaseAddressRegisterMemoryType::Bit32Space => addr =  (config_space[i] >> 4) as usize,
+                    BaseAddressRegisterMemoryType::Bit32SpaceUpTo1MB => addr =  (config_space[i] >> 4) as usize,
+                    BaseAddressRegisterMemoryType::Bit64Space => addr =  ((config_space[i + 1] as u64) << 32 | (config_space[i] as u64) >> 32) as usize,
+                    BaseAddressRegisterMemoryType::Bit64SpaceUpTo1MB => addr = ((config_space[i + 1] as u64) << 32 | (config_space[i] as u64) >> 32) as usize
+                }
+            }
+            else if base_addr_reg_type == BaseAddressRegisterType::IOSpace
+            {
+                addr = (config_space[i] >> 2) as usize;
+            }
+
+            break;
+        }
+
+        // if addr == 0
+        // {
+        //     panic!("Invalid base address");
+        // }
+
+        return addr;
+    }
+
     pub fn get_bist_register(&self) -> u8
     {
         return (self.config_space.raw_data[3] >> 24) as u8;
+    }
+
+    pub fn get_interrupt_pin(&self) -> u8
+    {
+        return (self.config_space.raw_data[15] >> 8) as u8;
+    }
+
+    pub fn get_interrupt_line(&self) -> u8
+    {
+        return self.config_space.raw_data[15] as u8;
     }
 
     pub fn is_multi_function_device(&self) -> bool
@@ -279,7 +454,7 @@ impl PciDevice
         return ((self.config_space.raw_data[3] >> 16) as u8 & 0x80) != 0;
     }
 
-    pub fn debug(&self)
+    pub fn dump(&self)
     {
         println!("[D--|V--]{:032b}", self.config_space.raw_data[0]);
         println!("[S|--C--]{:032b}", self.config_space.raw_data[1]);
@@ -297,6 +472,50 @@ impl PciDevice
         println!("[RS--|CP]{:032b}", self.config_space.raw_data[13]);
         println!("[--RS---]{:032b}", self.config_space.raw_data[14]);
         println!("[L|G|P|L]{:032b}", self.config_space.raw_data[15]);
+    }
+
+    pub fn dump_bar(&self)
+    {
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[4]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[5]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[6]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[7]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[8]);
+        println!("[--BAR--]{:032b}", self.config_space.raw_data[9]);
+    }
+
+    // like lspci -x command
+    pub fn dump_lspci_x(&self)
+    {
+        println!("{}:{}.{} {}: {} {} (rev {:02})", self.get_bus_num(), self.get_device_num(), self.get_func_num(), self.get_class_name(), self.get_vendor_name(), self.get_device_name(), self.get_revision_id());
+
+        for i in 0..4
+        {
+            print!("{:02x}: ", i * 16);
+
+            for j in 0..4
+            {
+                let mut k = 4;
+                loop
+                {
+                    if k > 32
+                    {
+                        break;
+                    }
+
+                    print!("{:01x}", ((self.config_space.raw_data[j + 4 * i] & (0xf << 32 - k)) >> 32 - k) as u8);
+
+                    if k % 8 == 0
+                    {
+                        print!(" ");
+                    }
+
+                    k += 4;
+                }
+            }
+
+            print!("\n");
+        }
     }
 }
 
@@ -337,6 +556,13 @@ impl PciConfigSpace
         asm::out32(0xcf8, addr);
 
         return asm::in32(0xcfc);
+    }
+
+    fn write_pci_config(&self, bus: u8, device: u8, func: u8, offset: u32, data: u32)
+    {
+        let addr = 0x80000000 | (bus as u32) << 16 | (device as u32) << 11 | (func as u32) << 8 | offset;
+        asm::out32(0xcf8, addr);
+        asm::out32(0xcfc, data);
     }
 
     fn get_all_config_space(&mut self, bus: u8, device: u8, func: u8)
