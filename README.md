@@ -1,6 +1,6 @@
 # myos
 GRUBを使ったrust製自作OS
-## 使用ツール
+## Used tools
 * rust (nightly)
 * cargo
 * cargo-xbuild
@@ -12,3 +12,22 @@ GRUBを使ったrust製自作OS
 * xorriso
 * grub
 * ld
+
+## Features
+- [x] x86 support
+- [x] Written in Rust and Assembly
+- [x] Boot loader: GRUB2
+- Screen rendering
+  - [x] VGA Text mode
+  - [ ] Own GUI
+- Device support
+  - [x] PS/2 Keyboard (Only ANSI US 104 Keyboard)
+  - [x] PS/2 Mouse
+  - [ ] Serial: UART 16650
+  - [ ] PCI connection
+    - [ ] SATA drive support
+  - [ ] USB connection
+- File system support
+  - [ ] FAT32
+- [x] Memory management: Segmentation -> Paging
+- [x] Interrupts controller (PIC): Intel 8259A
