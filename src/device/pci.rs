@@ -12,22 +12,24 @@ pub fn init()
     {
         if device.is_exist()
         {
-            // println!("[PCI{}:{}.{}] {}: {} (rev{})", device.get_bus_num(), device.get_device_num(), device.get_func_num(), device.get_class_name(), device.get_device_name(), device.get_revision_id());
-            // println!("BAR Type: {:?}", device.get_base_addr_reg_type());
+            //device.dump_lspci_x();
+            println!("=={}:{}.{}==", device.get_bus_num(), device.get_device_num(), device.get_func_num());
+            println!("Device ID: {}, Vendor ID: {}", device.get_device_id(), device.get_vendor_id());
+            println!("Status: {}, Command: {}", device.get_status(), device.get_commnad());
+            println!("Class code: {}, Subclass: {}, ProgIf: {}, Rev ID: {}", device.get_base_class_code(), device.get_subclass_code(), device.get_program_interface_class_code(), device.get_revision_id());
+            println!("BIST: {}, Header type: {:?}, LAT timer: {}, Cache Line Size: {}", device.get_bist_reg(), device.get_header_type(), device.get_lat_timer(), device.get_chache_line_size());
 
-            // if device.get_base_addr_reg_type() == BaseAddressRegisterType::MemorySpace
-            // {
-            //     println!("BAR Mem type: {:?}", device.get_base_addr_mem_type());
-            // }
-            // if device.get_base_addr_reg_type() != BaseAddressRegisterType::NoSpace
-            // {
-            //     println!("BAR Base addr: 0x{:x}", device.get_base_addr());
-            // }
+            if device.get_header_type() == PciHeaderType::StandardPci
+            {
+                print!("BAR: [");
 
-            //println!("INT Line: {}", device.get_interrupt_line());
-            //println!("INT Pin: {}", device.get_interrupt_pin());
-            //device.dump();
-            device.dump_lspci_x();
+                for reg in device.get_standard_base_addr_regs().unwrap()
+                {
+                    print!("0x{:x}, ", reg);
+                }
+
+                println!("]");
+            }
         }
     }
 }
@@ -196,6 +198,16 @@ impl PciDevice
         return self.config_space.raw_data[0] as u16;
     }
 
+    pub fn get_status(&self) -> u16
+    {
+        return (self.config_space.raw_data[1] >> 16) as u16;
+    }
+
+    pub fn get_commnad(&self) -> u16
+    {
+        return self.config_space.raw_data[1] as u16;
+    }
+
     pub fn get_revision_id(&self) -> u8
     {
         return self.config_space.raw_data[2] as u8;
@@ -206,7 +218,7 @@ impl PciDevice
         return (self.config_space.raw_data[2] >> 8) as u8
     }
 
-    pub fn get_sub_class_code(&self) -> u8
+    pub fn get_subclass_code(&self) -> u8
     {
         return (self.config_space.raw_data[2] >> 16) as u8;
     }
@@ -241,7 +253,7 @@ impl PciDevice
             return name;
         }
 
-        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_sub_class_code());
+        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_subclass_code());
 
         if subclass == None
         {
@@ -262,7 +274,7 @@ impl PciDevice
             return name;
         }
 
-        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_sub_class_code());
+        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_subclass_code());
 
         if subclass == None
         {
@@ -284,7 +296,7 @@ impl PciDevice
         return self.config_space.raw_data[3] as u8;
     }
 
-    pub fn get_latency_timer(&self) -> u8
+    pub fn get_lat_timer(&self) -> u8
     {
         return (self.config_space.raw_data[3] >> 8) as u8;
     }
@@ -381,60 +393,7 @@ impl PciDevice
         return mem_type;
     }
 
-    pub fn get_base_addr(&self) -> usize
-    {
-        let header_type = self.get_header_type();
-        let config_space = self.config_space.raw_data;
-        let base_addr_reg_type = self.get_base_addr_reg_type();
-
-        if header_type != PciHeaderType::StandardPci
-        {
-            panic!("Unsupported header type");
-        }
-
-        if base_addr_reg_type == BaseAddressRegisterType::NoSpace
-        {
-            panic!("Device hasn't memory space");
-        }
-
-        let mut addr = 0;
-
-        for i in 4..10
-        {
-            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
-            {
-                continue;
-            }
-
-            if base_addr_reg_type == BaseAddressRegisterType::MemorySpace
-            {
-                let base_addr_mem_type = self.get_base_addr_mem_type();
-
-                match base_addr_mem_type
-                {
-                    BaseAddressRegisterMemoryType::Bit32Space => addr =  (config_space[i] >> 4) as usize,
-                    BaseAddressRegisterMemoryType::Bit32SpaceUpTo1MB => addr =  (config_space[i] >> 4) as usize,
-                    BaseAddressRegisterMemoryType::Bit64Space => addr =  ((config_space[i + 1] as u64) << 32 | (config_space[i] as u64) >> 32) as usize,
-                    BaseAddressRegisterMemoryType::Bit64SpaceUpTo1MB => addr = ((config_space[i + 1] as u64) << 32 | (config_space[i] as u64) >> 32) as usize
-                }
-            }
-            else if base_addr_reg_type == BaseAddressRegisterType::IOSpace
-            {
-                addr = (config_space[i] >> 2) as usize;
-            }
-
-            break;
-        }
-
-        // if addr == 0
-        // {
-        //     panic!("Invalid base address");
-        // }
-
-        return addr;
-    }
-
-    pub fn get_bist_register(&self) -> u8
+    pub fn get_bist_reg(&self) -> u8
     {
         return (self.config_space.raw_data[3] >> 24) as u8;
     }
@@ -449,39 +408,399 @@ impl PciDevice
         return self.config_space.raw_data[15] as u8;
     }
 
+    pub fn get_cardbus_sis_pointer(&self) -> Option<u32>
+    {
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[10]);
+    }
+
+    pub fn get_subsystem_device_id(&self) -> Option<u16>
+    {
+        match self.get_header_type()
+        {
+            PciHeaderType::StandardPci => return Some((self.config_space.raw_data[11] >> 16) as u16),
+            PciHeaderType::PciToPciBridge => return None,
+            PciHeaderType::CardBusBridge => return Some(self.config_space.raw_data[16] as u16)
+        }
+    }
+
+    pub fn get_subsystem_vendor_id(&self) -> Option<u16>
+    {
+        match self.get_header_type()
+        {
+            PciHeaderType::StandardPci => return Some(self.config_space.raw_data[11] as u16),
+            PciHeaderType::PciToPciBridge => return None,
+            PciHeaderType::CardBusBridge => return Some((self.config_space.raw_data[16] >> 16) as u16)
+        }
+    }
+
+    pub fn get_expansion_rom_base_addr(&self) -> Option<u32>
+    {
+        match self.get_header_type()
+        {
+            PciHeaderType::StandardPci => return Some(self.config_space.raw_data[12]),
+            PciHeaderType::PciToPciBridge => return Some(self.config_space.raw_data[14]),
+            PciHeaderType::CardBusBridge => return None
+        }
+    }
+
+    pub fn get_cap_pointer(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[13] as u8);
+    }
+
+    pub fn get_max_lat(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[15] >> 24) as u8);
+    }
+
+    pub fn get_min_gnt(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[15] >> 16) as u8);
+    }
+
+    pub fn get_secondary_lat_timer(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[6] >> 24) as u8);
+    }
+
+    pub fn get_subordinate_bus_num(&self) -> Option<u8>
+    {
+        if self.get_header_type() == PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[6] >> 16) as u8);
+    }
+
+    pub fn get_secondary_bus_num(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[6] >> 8) as u8);
+    }
+
+    pub fn get_primary_bus_num(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[6] as u8);
+    }
+
+    pub fn get_secondary_status(&self) -> Option<u16>
+    {
+        match self.get_header_type()
+        {
+            PciHeaderType::StandardPci => return None,
+            PciHeaderType::PciToPciBridge => return Some((self.config_space.raw_data[7] >> 16) as u16),
+            PciHeaderType::CardBusBridge => return Some((self.config_space.raw_data[5] >> 16) as u16)
+        }
+    }
+
+    pub fn get_io_limit(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[7] >> 8) as u8);
+    }
+
+    pub fn get_io_base(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[7] as u8);
+    }
+
+    pub fn get_mem_limit(&self) -> Option<u16>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[8] >> 16) as u16);
+    }
+
+    pub fn get_mem_base(&self) -> Option<u16>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[8] as u16);
+    }
+
+    pub fn get_prefetchable_mem_limit(&self) -> Option<u16>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[9] >> 16) as u16);
+    }
+
+    pub fn get_prefetchable_mem_base(&self) -> Option<u16>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[9] as u16);
+    }
+
+    pub fn get_prefetchable_base_upper(&self) -> Option<u32>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[10]);
+    }
+
+    pub fn get_prefetchable_limit_upper(&self) -> Option<u32>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[11]);
+    }
+
+    pub fn get_io_limit_upper(&self) -> Option<u16>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[12] >> 16) as u16);
+    }
+
+    pub fn get_io_base_upper(&self) -> Option<u16>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[12] as u16);
+    }
+
+    pub fn get_bridge_control_reg(&self) -> Option<u16>
+    {
+        if self.get_header_type() == PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[15] >> 16) as u16);
+    }
+
+    pub fn get_cardbus_socket_exca_base_addr(&self) -> Option<u32>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[4]);
+    }
+
+    pub fn get_cap_list_offset(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[5] as u8);
+    }
+
+    pub fn get_cardbus_lat_timer(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[6] >> 24) as u8);
+    }
+
+    pub fn get_cardbus_num(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        return Some((self.config_space.raw_data[6] >> 8) as u8);
+    }
+
+    pub fn get_pci_bus_num(&self) -> Option<u8>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[6] as u8);
+    }
+
+    pub fn get_pc_card_legacy_mode_base_addr(&self) -> Option<u32>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        return Some(self.config_space.raw_data[17]);
+    }
+
+    pub fn get_standard_base_addr_regs(&self) -> Option<[u32; 6]>
+    {
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        let regs =
+        [
+            self.config_space.raw_data[4],
+            self.config_space.raw_data[5],
+            self.config_space.raw_data[6],
+            self.config_space.raw_data[7],
+            self.config_space.raw_data[8],
+            self.config_space.raw_data[9]
+        ];
+
+        return Some(regs);
+    }
+
+    pub fn get_pci_to_pci_bridge_base_addr_regs(&self) -> Option<[u32; 2]>
+    {
+        if self.get_header_type() != PciHeaderType::PciToPciBridge
+        {
+            return None;
+        }
+
+        let regs =
+        [
+            self.config_space.raw_data[4],
+            self.config_space.raw_data[5],
+        ];
+
+        return Some(regs);
+    }
+
+    pub fn get_cardbus_bridge_mem_base_addr_regs(&self) -> Option<[u32; 2]>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        let regs =
+        [
+            self.config_space.raw_data[7],
+            self.config_space.raw_data[9],
+        ];
+
+        return Some(regs);
+    }
+
+    pub fn get_cardbus_bridge_mem_limit_regs(&self) -> Option<[u32; 2]>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        let regs =
+        [
+            self.config_space.raw_data[8],
+            self.config_space.raw_data[10],
+        ];
+
+        return Some(regs);
+    }
+
+    pub fn get_cardbus_bridge_io_base_addr_regs(&self) -> Option<[u32; 2]>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        let regs =
+        [
+            self.config_space.raw_data[11],
+            self.config_space.raw_data[13],
+        ];
+
+        return Some(regs);
+    }
+
+    pub fn get_cardbus_bridge_io_limit_regs(&self) -> Option<[u32; 2]>
+    {
+        if self.get_header_type() != PciHeaderType::CardBusBridge
+        {
+            return None;
+        }
+
+        let regs =
+        [
+            self.config_space.raw_data[12],
+            self.config_space.raw_data[14],
+        ];
+
+        return Some(regs);
+    }
+
     pub fn is_multi_function_device(&self) -> bool
     {
         return ((self.config_space.raw_data[3] >> 16) as u8 & 0x80) != 0;
-    }
-
-    pub fn dump(&self)
-    {
-        println!("[D--|V--]{:032b}", self.config_space.raw_data[0]);
-        println!("[S|--C--]{:032b}", self.config_space.raw_data[1]);
-        println!("[C----|R]{:032b}", self.config_space.raw_data[2]);
-        println!("[B|H|L|C]{:032b}", self.config_space.raw_data[3]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[4]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[5]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[6]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[7]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[8]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[9]);
-        println!("[-CCISP-]{:032b}", self.config_space.raw_data[10]);
-        println!("[S---SV-]{:032b}", self.config_space.raw_data[11]);
-        println!("[EROMBAR]{:032b}", self.config_space.raw_data[12]);
-        println!("[RS--|CP]{:032b}", self.config_space.raw_data[13]);
-        println!("[--RS---]{:032b}", self.config_space.raw_data[14]);
-        println!("[L|G|P|L]{:032b}", self.config_space.raw_data[15]);
-    }
-
-    pub fn dump_bar(&self)
-    {
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[4]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[5]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[6]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[7]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[8]);
-        println!("[--BAR--]{:032b}", self.config_space.raw_data[9]);
     }
 
     // like lspci -x command
