@@ -1,6 +1,6 @@
 // intel 8259A interrupt controller on PC/AT
 
-use crate::{println, data::fifo::Fifo};
+use crate::{data::fifo::Fifo, util::logger::log_info};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -80,7 +80,7 @@ pub fn init_pic()
 
     init_keyboard();
 
-    println!("PIC initialized");
+    log_info("PIC initialized");
 }
 
 fn init_keyboard()

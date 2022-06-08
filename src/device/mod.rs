@@ -1,4 +1,4 @@
-use crate::{println, device::usb::{Usb, UsbMode}};
+use crate::{device::usb::{Usb, UsbMode}, util::logger::log_info};
 
 use self::pci::Pci;
 
@@ -10,8 +10,9 @@ pub fn init()
 {
     // pci
     let pci = Pci::new();
-    println!("PCI initialized");
+    log_info("PCI initialized");
 
     // usb3.0
     let usb = Usb::new(&pci, UsbMode::Xhci);
+    log_info("USB driver initialized");
 }

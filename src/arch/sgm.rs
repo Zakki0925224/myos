@@ -1,4 +1,4 @@
-use crate::{handler, println};
+use crate::{handler, util::logger::log_info};
 
 use super::asm;
 
@@ -98,7 +98,7 @@ pub fn init()
     // ktss descriptor
 
     asm::load_gdtr(GDT_LIMIT, GDT_ADDR);
-    println!("GDT initialized");
+    log_info("GDT initialized");
 
     // init IDT
     for i in 0..=(IDT_LIMIT / 8)
@@ -117,7 +117,7 @@ pub fn init()
     *idt = GateDescriptor::new(handler!(mouse_int) as u32, IDT_INT_SELECTOR, INTGATE);
 
     asm::load_idtr(IDT_LIMIT, IDT_ADDR);
-    println!("IDT initialized");
+    log_info("IDT initialized");
 }
 
 pub fn get_gdt(index: i32) -> SegmentDescriptor

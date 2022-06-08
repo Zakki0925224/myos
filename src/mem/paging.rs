@@ -2,7 +2,7 @@ use core::ptr::{write_volatile, read_volatile};
 
 use multiboot2::BootInformation;
 
-use crate::{arch::asm, println, print};
+use crate::{arch::asm, util::logger::log_info};
 
 use super::{phys_mem::{PhysicalMemoryManager, MemoryBlockInfo, MEM_BLOCK_SIZE}, virt_mem::VirtualAddress};
 
@@ -316,7 +316,7 @@ impl Paging
     {
         asm::set_cr3(self.pd_block.mem_block_start_addr);
         asm::enable_paging();
-        println!("Paging enabled");
+        log_info("Paging enabled");
     }
 
     // pub fn map_page(&mut self, phys_addr: u32, virt_addr: VirtualAddress)

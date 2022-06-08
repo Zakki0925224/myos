@@ -1,4 +1,4 @@
-use crate::println;
+use crate::util::logger::log_debug;
 
 // https://wiki.osdev.org/PS2_Keyboard
 // scan code set 1
@@ -339,7 +339,7 @@ impl Keyboard
         }
 
         let e = self.get_key_event();
-        println!("[K]: {:?} -> {:?}", self.key_buf, e);
+        log_debug("keyboard", (self.key_buf, e));
 
         self.clear_key_buf();
     }

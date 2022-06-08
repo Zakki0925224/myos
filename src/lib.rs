@@ -18,7 +18,7 @@ use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::boot_info::{get_kernel_addr, get_multiboot_addr, get_total_mem_size, get_all_mem_areas}};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::{get_kernel_addr, get_multiboot_addr, get_total_mem_size, get_all_mem_areas}, logger::log_debug}};
 
 #[no_mangle]
 #[start]
@@ -31,8 +31,6 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     {
         panic!("Invalid magic number: 0x{:x}", magic);
     }
-
-    //debug(&boot_info);
 
     println!("Welcome to {}!", meta::OS_NAME);
     println!("Description: {}", meta::OS_DESCRIPTION);
@@ -65,7 +63,7 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
         {
             let i = MOUSEBUF.lock().get().unwrap();
             asm::sti();
-            println!("[M]0x{:x}", i);
+            log_debug("mouse", i);
         }
         else
         {
@@ -73,24 +71,6 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
             asm::hlt();
         }
     }
-}
-
-fn debug(boot_info: &BootInformation)
-{
-    let (kernel_start, kernel_end) = get_kernel_addr(&boot_info);
-    let (multiboot_start, multiboot_end) = get_multiboot_addr(&boot_info);
-
-    println!("All memory areas:");
-    for area in get_all_mem_areas(&boot_info)
-    {
-        println!("\t0x{:x} -> 0x{:x}, Size: {}B, Type: {:?}", area.start_address(), area.end_address() - 1, area.size() - 1, area.typ());
-    }
-
-    println!("\ttotal: {}B", get_total_mem_size(&boot_info));
-
-    println!("Kernel 0x{:x} -> 0x{:x}, Size: {}B", kernel_start, kernel_end, kernel_start + kernel_end);
-    println!("Multiboot 0x{:x} -> 0x{:x}, Size: {}B", multiboot_start, multiboot_end, multiboot_start + multiboot_end);
-    println!("\n===============================");
 }
 
 #[panic_handler]
