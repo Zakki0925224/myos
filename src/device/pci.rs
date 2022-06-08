@@ -4,38 +4,8 @@ use crate::{arch::asm, println, print};
 
 const PCI_CS32_DEVICE_NOT_EXIST: u32 = 0xffffffff;
 
-pub fn init()
-{
-    let pci = Pci::new();
-
-    for device in pci.get_devices()
-    {
-        if device.is_exist()
-        {
-            //device.dump_lspci_x();
-            println!("=={}:{}.{}==", device.get_bus_num(), device.get_device_num(), device.get_func_num());
-            println!("Device ID: {}, Vendor ID: {}", device.get_device_id(), device.get_vendor_id());
-            println!("Status: {}, Command: {}", device.get_status(), device.get_commnad());
-            println!("Class code: {}, Subclass: {}, ProgIf: {}, Rev ID: {}", device.get_base_class_code(), device.get_subclass_code(), device.get_program_interface_class_code(), device.get_revision_id());
-            println!("BIST: {}, Header type: {:?}, LAT timer: {}, Cache Line Size: {}", device.get_bist_reg(), device.get_header_type(), device.get_lat_timer(), device.get_chache_line_size());
-
-            if device.get_header_type() == PciHeaderType::StandardPci
-            {
-                print!("BAR: [");
-
-                for reg in device.get_standard_base_addr_regs().unwrap()
-                {
-                    print!("0x{:x}, ", reg);
-                }
-
-                println!("]");
-            }
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-struct Pci
+pub struct Pci
 {
     devices: [PciDevice; 256],
     device_cnt: usize
@@ -78,7 +48,7 @@ impl Pci
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum PciHeaderType
+pub enum PciHeaderType
 {
     StandardPci,
     PciToPciBridge,
@@ -86,7 +56,7 @@ enum PciHeaderType
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum BaseAddressRegisterType
+pub enum BaseAddressRegisterType
 {
     MemorySpace,
     IOSpace,
@@ -94,7 +64,7 @@ enum BaseAddressRegisterType
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum BaseAddressRegisterMemoryType
+pub enum BaseAddressRegisterMemoryType
 {
     Bit32Space,
     Bit64Space,
@@ -218,7 +188,7 @@ impl PciDevice
         return (self.config_space.raw_data[2] >> 8) as u8
     }
 
-    pub fn get_subclass_code(&self) -> u8
+    pub fn get_sub_class_code(&self) -> u8
     {
         return (self.config_space.raw_data[2] >> 16) as u8;
     }
@@ -253,7 +223,7 @@ impl PciDevice
             return name;
         }
 
-        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_subclass_code());
+        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_sub_class_code());
 
         if subclass == None
         {
@@ -274,7 +244,7 @@ impl PciDevice
             return name;
         }
 
-        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_subclass_code());
+        let subclass = class.unwrap().subclasses().find(|sc| sc.id() == self.get_sub_class_code());
 
         if subclass == None
         {
@@ -801,6 +771,11 @@ impl PciDevice
     pub fn is_multi_function_device(&self) -> bool
     {
         return ((self.config_space.raw_data[3] >> 16) as u8 & 0x80) != 0;
+    }
+
+    pub fn dump_lspci(&self)
+    {
+        println!("{}:{}.{} {}: {} {} (rev {:02})", self.get_bus_num(), self.get_device_num(), self.get_func_num(), self.get_class_name(), self.get_vendor_name(), self.get_device_name(), self.get_revision_id());
     }
 
     // like lspci -x command

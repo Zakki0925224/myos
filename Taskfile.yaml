@@ -23,7 +23,7 @@ vars:
 
     NASM: nasm -f elf -o
     LD: ld -m elf_i386 -v -nostdlib -o {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} -T {{$.LINKER_FILE}}
-    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -d int -no-reboot -no-shutdown -m 4G
+    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -d int -no-reboot -no-shutdown -m 4G -device qemu-xhci
 
 
 tasks:
