@@ -8,6 +8,7 @@
 // #![reexport_test_harness_main = "test_main"]
 
 mod arch;
+mod console;
 mod data;
 mod device;
 mod meta;
@@ -18,7 +19,7 @@ use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::{get_kernel_addr, get_multiboot_addr, get_total_mem_size, get_all_mem_areas}, logger::log_debug}};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::{get_kernel_addr, get_multiboot_addr, get_total_mem_size, get_all_mem_areas}, logger::log_debug}, console::{SystemConsole, ascii}};
 
 #[no_mangle]
 #[start]
@@ -44,6 +45,10 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     device::init();
 
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
+
+    let mut console = SystemConsole::new();
+    console.start();
+
     asm::sti();
 
     // #[cfg(test)]
@@ -57,13 +62,24 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
         {
             let key = KEYBUF.lock().get().unwrap();
             asm::sti();
-            keyboard.input(key);
+            let e = keyboard.input(key);
+
+            if !e.eq(&None)
+            {
+                let asc = ascii::key_event_to_ascii_code(e.unwrap().0, e.unwrap().1);
+                //log_debug("keyboard", (e.unwrap().0, e.unwrap().1));
+
+                if !asc.eq(&None) && console.is_waiting_input()
+                {
+                    console.input_char(asc.unwrap());
+                }
+            }
         }
         else if MOUSEBUF.lock().status() != 0
         {
             let i = MOUSEBUF.lock().get().unwrap();
             asm::sti();
-            log_debug("mouse", i);
+            //log_debug("mouse", i);
         }
         else
         {

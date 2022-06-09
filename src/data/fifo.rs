@@ -27,6 +27,15 @@ impl Fifo
         };
     }
 
+    pub fn clear(&mut self)
+    {
+        self.buf = RefCell::new([0; 128]);
+        self.p = Cell::new(0);
+        self.q = Cell::new(0);
+        self.free = Cell::new(self.size);
+        self.flags = Cell::new(0);
+    }
+
     pub fn put(&self, data: u8) -> Result<(), &'static str>
     {
         if self.free.get() == 0

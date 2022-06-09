@@ -279,12 +279,23 @@ impl KeyEvent
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct ModifierKeysState
+{
+    pub on_shift: bool,
+    pub on_ctrl: bool,
+    pub on_gui: bool,
+    pub on_alt: bool,
+    // pub on_numlock: bool
+}
+
 pub struct Keyboard
 {
     pub layout: KeyLayout,
     pub key_map: [ScanCode; 104],
     key_buf: [u8; 6],
-    key_buf_cnt: usize
+    key_buf_cnt: usize,
+    modifier_keys_state: ModifierKeysState
 }
 
 impl Keyboard
@@ -296,7 +307,14 @@ impl Keyboard
             panic!("Unsupported keyboard layout");
         }
 
-        return Keyboard { layout, key_map: AnsiUs104KeyMap::new().get_key_map(), key_buf: [0; 6], key_buf_cnt: 0 };
+        return Keyboard
+        {
+            layout,
+            key_map: AnsiUs104KeyMap::new().get_key_map(),
+            key_buf: [0; 6],
+            key_buf_cnt: 0,
+            modifier_keys_state: ModifierKeysState { on_shift: false, on_ctrl: false, on_gui: false, on_alt: false }
+        };
     }
 
     fn clear_key_buf(&mut self)
@@ -305,7 +323,7 @@ impl Keyboard
         self.key_buf = [0; 6];
     }
 
-    pub fn input(&mut self, data: u8)
+    pub fn input(&mut self, data: u8) -> Option<(KeyEvent, ModifierKeysState)>
     {
         if self.key_buf_cnt > 5
         {
@@ -320,28 +338,63 @@ impl Keyboard
                (data == 0xe0 || data == 0xe1)
             {
                 self.key_buf_cnt += 1;
-                return;
+                return None;;
             }
 
             if self.key_buf_cnt == 1 &&
                (data == 0x2a || data == 0xb7 || (self.key_buf[0] == 0xe1 && data == 0x1d))
             {
                 self.key_buf_cnt += 1;
-                return;
+                return None;
             }
 
             if self.key_buf_cnt == 2 &&
                (data == 0xe0 || data == 0x45)
             {
                 self.key_buf_cnt += 1;
-                return;
+                return None;
             }
         }
 
         let e = self.get_key_event();
-        log_debug("keyboard", (self.key_buf, e));
-
+        self.set_modifier_key(e);
         self.clear_key_buf();
+
+        return Some((e, self.modifier_keys_state));
+    }
+
+    fn set_modifier_key(&mut self, event: KeyEvent)
+    {
+        if event.state == KeyState::Pressed
+        {
+            match event.code
+            {
+                KeyCode::LShift => self.modifier_keys_state.on_shift = true,
+                KeyCode::RShift => self.modifier_keys_state.on_shift = true,
+                KeyCode::LCtrl => self.modifier_keys_state.on_ctrl = true,
+                KeyCode::RCtrl => self.modifier_keys_state.on_ctrl = true,
+                KeyCode::LGui => self.modifier_keys_state.on_gui = true,
+                KeyCode::RGui => self.modifier_keys_state.on_gui = true,
+                KeyCode::LAlt => self.modifier_keys_state.on_alt = true,
+                KeyCode::RAlt => self.modifier_keys_state.on_alt = true,
+                _ => return
+            }
+        }
+        else if event.state == KeyState::Released
+        {
+            match event.code
+            {
+                KeyCode::LShift => self.modifier_keys_state.on_shift = false,
+                KeyCode::RShift => self.modifier_keys_state.on_shift = false,
+                KeyCode::LCtrl => self.modifier_keys_state.on_ctrl = false,
+                KeyCode::RCtrl => self.modifier_keys_state.on_ctrl = false,
+                KeyCode::LGui => self.modifier_keys_state.on_gui = false,
+                KeyCode::RGui => self.modifier_keys_state.on_gui = false,
+                KeyCode::LAlt => self.modifier_keys_state.on_alt = false,
+                KeyCode::RAlt => self.modifier_keys_state.on_alt = false,
+                _ => return
+            }
+        }
     }
 
     fn get_key_event(&mut self) -> KeyEvent
