@@ -44,10 +44,6 @@ impl VirtualAddress
             panic!("page_addr is out of range");
         }
 
-        // println!("PDI: {:032b}", page_directory_index);
-        // println!("PTI: {:032b}", page_table_index);
-        // println!("PO: {:032b}", page_offset);
-
         page_directory_index <<= VA_PD_INDEX_SHIFT;
         page_table_index <<= VA_PT_INDEX_SHIFT;
         page_offset <<= VA_PAGE_OFFSET_SHIFT;

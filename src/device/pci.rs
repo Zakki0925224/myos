@@ -2,7 +2,9 @@ use pci_ids::{Vendors, Classes};
 
 use crate::{arch::asm, println, print};
 
+pub const PCI_VENDOR_ID_INTEL: u16 = 0x8086;
 const PCI_CS32_DEVICE_NOT_EXIST: u32 = 0xffffffff;
+const PCI_CS32_FILL: u32 = 0xffffffff;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Pci
@@ -212,7 +214,7 @@ impl PciDevice
         return class.unwrap().name();
     }
 
-    pub fn get_subclass_name(&self) -> &str
+    pub fn get_sub_class_name(&self) -> &str
     {
         let mut name = "Unknown";
 
@@ -283,11 +285,11 @@ impl PciDevice
         }
     }
 
-    pub fn get_base_addr_reg_type(&self) -> BaseAddressRegisterType
+    pub fn get_base_addr_reg_type(&self) -> Option<BaseAddressRegisterType>
     {
         if self.get_header_type() != PciHeaderType::StandardPci
         {
-            panic!("Unsupported header type");
+            return None
         }
 
         let config_space = self.config_space.raw_data;
@@ -313,14 +315,14 @@ impl PciDevice
             break;
         }
 
-        return bar_type;
+        return Some(bar_type);
     }
 
-    pub fn get_base_addr_mem_type(&self) -> BaseAddressRegisterMemoryType
+    pub fn get_base_addr_mem_type(&self) -> Option<BaseAddressRegisterMemoryType>
     {
-        if self.get_base_addr_reg_type() != BaseAddressRegisterType::MemorySpace
+        if self.get_base_addr_reg_type() != Some(BaseAddressRegisterType::MemorySpace)
         {
-            panic!("Base address register type isn't Memory Space");
+            return None;
         }
 
         let config_space = self.config_space.raw_data;
@@ -360,7 +362,44 @@ impl PciDevice
             break;
         }
 
-        return mem_type;
+        return Some(mem_type);
+    }
+
+    pub fn get_standard_base_addr(&self) -> Option<u32>
+    {
+
+        if self.get_header_type() != PciHeaderType::StandardPci
+        {
+            return None;
+        }
+
+        if self.get_base_addr_mem_type() == Some(BaseAddressRegisterMemoryType::Bit64Space) ||
+           self.get_base_addr_mem_type() == Some(BaseAddressRegisterMemoryType::Bit64SpaceUpTo1MB)
+        {
+            return None;
+        }
+
+        let config_space = self.config_space.raw_data;
+
+        for i in 4..10
+        {
+            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
+            {
+                continue;
+            }
+
+            if self.get_base_addr_reg_type() == Some(BaseAddressRegisterType::MemorySpace)
+            {
+                return Some(config_space[i] & !0xf);
+            }
+            else if self.get_base_addr_reg_type() == Some(BaseAddressRegisterType::IOSpace)
+            {
+                return Some(config_space[i] & !0x3);
+            }
+
+        }
+
+        return None;
     }
 
     pub fn get_bist_reg(&self) -> u8
@@ -773,6 +812,16 @@ impl PciDevice
         return ((self.config_space.raw_data[3] >> 16) as u8 & 0x80) != 0;
     }
 
+    pub fn read_config(&self, offset: u32) -> u32
+    {
+        return self.config_space.read_pci_config(self.bus, self.device, self.func, offset);
+    }
+
+    pub fn write_config(&self, offset: u32, data: u32)
+    {
+        self.config_space.write_pci_config(self.bus, self.device, self.func, offset, data);
+    }
+
     pub fn dump_lspci(&self)
     {
         println!("{}:{}.{} {}: {} {} (rev {:02})", self.get_bus_num(), self.get_device_num(), self.get_func_num(), self.get_class_name(), self.get_vendor_name(), self.get_device_name(), self.get_revision_id());
@@ -843,7 +892,7 @@ impl PciConfigSpace
         }
     }
 
-    fn read_pci_config(&self, bus: u8, device: u8, func: u8, offset: u32) -> u32
+    pub fn read_pci_config(&self, bus: u8, device: u8, func: u8, offset: u32) -> u32
     {
         // offset is a multiple of 4
         let addr = 0x80000000 | (bus as u32) << 16 | (device as u32) << 11 | (func as u32) << 8 | offset;
@@ -852,7 +901,7 @@ impl PciConfigSpace
         return asm::in32(0xcfc);
     }
 
-    fn write_pci_config(&self, bus: u8, device: u8, func: u8, offset: u32, data: u32)
+    pub fn write_pci_config(&self, bus: u8, device: u8, func: u8, offset: u32, data: u32)
     {
         let addr = 0x80000000 | (bus as u32) << 16 | (device as u32) << 11 | (func as u32) << 8 | offset;
         asm::out32(0xcf8, addr);
