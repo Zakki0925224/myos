@@ -1,18 +1,25 @@
 use crate::{device::usb::{Usb, UsbMode}, util::logger::{log_info, log_debug, log_warn}};
-
 use self::pci::{Pci, PciHeaderType};
+use lazy_static::lazy_static;
+use spin::Mutex;
 
 pub mod keyboard;
 pub mod pci;
 pub mod usb;
 
+lazy_static!
+{
+    pub static ref PCI: Mutex<Pci> = Mutex::new(Pci::new());
+    pub static ref USB: Mutex<Usb> = Mutex::new(Usb::new());
+}
+
 pub fn init()
 {
     // pci
-    let pci = Pci::new();
+    PCI.lock().init();
     log_info("PCI initialized");
 
-    for device in pci.get_devices()
+    for device in PCI.lock().get_devices()
     {
         if device.is_exist() && device.get_header_type() == PciHeaderType::StandardPci
         {
@@ -21,15 +28,6 @@ pub fn init()
     }
 
     // usb3.0
-    let usb = Usb::new(&pci, UsbMode::Xhci);
-
-    if usb.eq(&None)
-    {
-        log_warn("USB driver wasn't initialized because USB controller not found");
-    }
-    else
-    {
-        usb.unwrap().init(&pci);
-        log_info("USB driver initialized");
-    }
+    USB.lock().init(UsbMode::Xhci);
+    log_info("USB driver initialized");
 }

@@ -1,4 +1,4 @@
-use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo};
+use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::PCI, meta};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -42,7 +42,7 @@ impl SystemConsole
 
         if ascii_code == AsciiCode::NewLine
         {
-            self.do_process();
+            self.parse_input();
             self.wait_input();
             return;
         }
@@ -66,16 +66,35 @@ impl SystemConsole
         self.is_waiting_input = true;
     }
 
-    fn do_process(&mut self)
+    fn parse_input(&mut self)
+    {
+        const limit: usize = 5;
+
+        if INPUTBUF.lock().status() == 0 || ((self.input_cnt as usize) < limit)
+        {
+            return;
+        }
+
+        let mut chars = [0x0 as char; limit];
+
+        for i in 0..5
+        {
+            chars[i] = INPUTBUF.lock().get().unwrap() as char;
+        }
+
+        match chars
+        {
+            ['l', 's', 'p', 'c', 'i'] => self.do_process(|| PCI.lock().lspci()),
+            ['k', 'n', 'a', 'm', 'e'] => self.do_process(|| println!("{}", meta::OS_NAME)),
+            _ => ()
+        }
+    }
+
+    fn do_process<F: Fn()>(&mut self, func: F)
     {
         self.is_waiting_input = false;
         print!("\n");
         log_info("Processing...");
-
-        for i in 0..self.input_cnt
-        {
-            let c = INPUTBUF.lock().get().unwrap();
-            print!("{}", c as char);
-        }
+        func();
     }
 }

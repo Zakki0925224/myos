@@ -1,6 +1,6 @@
-use crate::util::logger::{log_debug, log_info};
+use crate::util::logger::{log_debug, log_info, log_warn};
 
-use super::pci::{PciDevice, Pci, PCI_VENDOR_ID_INTEL};
+use super::{pci::{PciDevice, Pci, PCI_VENDOR_ID_INTEL}, PCI};
 
 const PCI_USB_CONTROLLER_BASE_CLASS_CODE: u8 = 0x0c;
 const PCI_USB_CONTROLLER_SUB_CLASS_CODE: u8 = 0x03;
@@ -27,18 +27,26 @@ pub struct Usb
 
 impl Usb
 {
-    pub fn new(pci: &Pci, mode: UsbMode) -> Option<Usb>
+    pub fn new() -> Usb
     {
-        let mut pci_usb_device = PciDevice::new();
+        let pci_usb_device = PciDevice::new();
+        let mode = UsbMode::Ohci; // default
 
-        for device in pci.get_devices()
+        return Usb { mode, pci_usb_device };
+    }
+
+    pub fn init(&mut self, mode: UsbMode)
+    {
+        self.mode = mode;
+
+        for device in PCI.lock().get_devices()
         {
             if device.get_base_class_code() == PCI_USB_CONTROLLER_BASE_CLASS_CODE &&
                device.get_sub_class_code() == PCI_USB_CONTROLLER_SUB_CLASS_CODE
             {
                 let mut prog_if = 0;
 
-                match mode
+                match self.mode
                 {
                     UsbMode::Ohci => prog_if = PCI_OHCI_USB_CONTROLLER_PRGIF,
                     UsbMode::Uhci => prog_if = PCI_UHCI_USB_CONTROLLER_PRGIF,
@@ -48,7 +56,7 @@ impl Usb
 
                 if device.get_program_interface_class_code() == prog_if
                 {
-                    pci_usb_device = device;
+                    self.pci_usb_device = device;
                 }
 
                 if device.get_vendor_id() == PCI_VENDOR_ID_INTEL
@@ -58,27 +66,23 @@ impl Usb
             }
         }
 
-        if !pci_usb_device.is_exist()
+        if !self.pci_usb_device.is_exist()
         {
-            return None;
+            log_warn("USB controller not found");
+            return;
         }
 
-        return Some(Usb { mode, pci_usb_device });
-    }
-
-    pub fn init(&self, pci: &Pci)
-    {
         if self.mode == UsbMode::Xhci
         {
-            self.switch_ehci_to_xhci_mode(pci);
+            self.switch_ehci_to_xhci_mode();
         }
     }
 
-    fn switch_ehci_to_xhci_mode(&self, pci: &Pci)
+    fn switch_ehci_to_xhci_mode(&self)
     {
         let mut is_exist_intel_ehc = false;
 
-        for device in pci.get_devices()
+        for device in PCI.lock().get_devices()
         {
             if device.get_vendor_id() == PCI_VENDOR_ID_INTEL &&
                device.get_base_class_code() == 0x0c &&

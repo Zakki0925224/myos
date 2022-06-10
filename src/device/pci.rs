@@ -17,9 +17,13 @@ impl Pci
 {
     pub fn new() -> Pci
     {
+        return Pci { devices: [PciDevice::new(); 256], device_cnt: 0 };
+    }
+
+    pub fn init(&mut self)
+    {
         let mut devices = [PciDevice::new(); 256];
         let mut device_cnt = 0;
-
         for i in 0..=255
         {
             for j in 0..32
@@ -35,7 +39,8 @@ impl Pci
             }
         }
 
-        return Pci { devices, device_cnt };
+        self.devices = devices;
+        self.device_cnt = device_cnt;
     }
 
     pub fn get_devices(&self) -> [PciDevice; 256]
@@ -46,6 +51,17 @@ impl Pci
     pub fn get_device_cnt(&self) -> usize
     {
         return self.device_cnt;
+    }
+
+    pub fn lspci(&self)
+    {
+        for device in self.devices
+        {
+            if device.is_exist()
+            {
+                device.dump_lspci();
+            }
+        }
     }
 }
 
