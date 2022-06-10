@@ -263,11 +263,6 @@ impl Paging
         let mut i = 0;
         loop
         {
-            if i > self.phys_mem_manager.get_total_mem_size()
-            {
-                break;
-            }
-
             let va = VirtualAddress::new(i);
 
             // 0x0 to 0x0fffff match addresses
@@ -297,7 +292,14 @@ impl Paging
                 pde.set(pt_block.mem_block_start_addr, PDE_FLAGS_P | PDE_FLAGS_R_W);
             }
 
-            i += MEM_BLOCK_SIZE;
+            if u32::MAX - i < MEM_BLOCK_SIZE || i + MEM_BLOCK_SIZE > self.phys_mem_manager.get_total_mem_size()
+            {
+                break;
+            }
+            else
+            {
+                i += MEM_BLOCK_SIZE;
+            }
         }
 
         // for i in 0..1024*1024

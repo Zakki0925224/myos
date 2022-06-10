@@ -1,6 +1,6 @@
 use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-use crate::{println, util::boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}};
+use crate::{println, util::{boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}, logger::log_debug}};
 
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
@@ -57,9 +57,21 @@ impl PhysicalMemoryManager
 
     pub fn init(&mut self, boot_info: &BootInformation)
     {
-        self.total_mem_size = get_total_mem_size(boot_info) as u32;
+        let total = get_total_mem_size(boot_info);
+
+        if total <= u32::MAX as u64
+        {
+            self.total_mem_size = total as u32;
+        }
+        else  // greetar than 4GB memory
+        {
+            self.total_mem_size = u32::MAX;
+        }
+
         self.mem_blocks = self.total_mem_size / MEM_BLOCK_SIZE;
+        log_debug("mem_blocks", self.mem_blocks);
         self.allocated_blocks = self.mem_blocks;
+        self.free_blocks = 0;
         let (_, e) = get_multiboot_addr(boot_info);
         self.memmap_addr = (e + 1) as u32;
         self.memmap_size = self.mem_blocks / u32::BITS * 4; // memmap size (byte)
@@ -82,6 +94,11 @@ impl PhysicalMemoryManager
 
             loop
             {
+                if self.free_blocks == self.mem_blocks
+                {
+                    break;
+                }
+
                 if area.typ() != MemoryAreaType::Available
                 {
                     mb_index = area.size() as u32 / MEM_BLOCK_SIZE;
@@ -98,6 +115,11 @@ impl PhysicalMemoryManager
                 self.deallocate_mem_block(mb_index as usize);
                 self.allocated_blocks -= 1;
                 self.free_blocks += 1;
+
+                if self.allocated_blocks < 5
+                {
+                    log_debug("i, ab, fb, mb_i", (i, self.allocated_blocks, self.free_blocks, mb_index));
+                }
 
                 mb_index += 1;
                 i += MEM_BLOCK_SIZE;
