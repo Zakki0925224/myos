@@ -21,6 +21,7 @@ pub enum UsbMode
 #[derive(PartialEq)]
 pub struct Usb
 {
+    is_init: bool,
     mode: UsbMode,
     pci_usb_device: PciDevice
 }
@@ -32,7 +33,7 @@ impl Usb
         let pci_usb_device = PciDevice::new();
         let mode = UsbMode::Ohci; // default
 
-        return Usb { mode, pci_usb_device };
+        return Usb { is_init: false, mode, pci_usb_device };
     }
 
     pub fn init(&mut self, mode: UsbMode)
@@ -76,6 +77,13 @@ impl Usb
         {
             self.switch_ehci_to_xhci_mode();
         }
+
+        self.is_init = true;
+    }
+
+    pub fn is_init(&self) -> bool
+    {
+        return self.is_init;
     }
 
     fn switch_ehci_to_xhci_mode(&self)

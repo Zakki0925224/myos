@@ -1,4 +1,4 @@
-use crate::{println, util::logger::log_info, mem::paging::Paging};
+use crate::{println, util::logger::{log_info, log_warn}, mem::paging::Paging};
 use multiboot2::BootInformation;
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -18,5 +18,13 @@ pub fn init(boot_info: &BootInformation)
 {
     PAGING.lock().init(boot_info);
     PAGING.lock().enable();
-    log_info("Paging enabled");
+
+    if PAGING.lock().is_enabled()
+    {
+        log_info("Paging enabled");
+    }
+    else
+    {
+        log_warn("Failed to enable paging");
+    }
 }

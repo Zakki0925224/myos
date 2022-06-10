@@ -316,11 +316,16 @@ impl Paging
         // }
     }
 
-    pub fn enable(&self)
+    pub fn enable(&mut self)
     {
         asm::set_cr3(self.pd_block.mem_block_start_addr);
         asm::enable_paging();
         self.is_enabled = true;
+    }
+
+    pub fn is_enabled(&self) -> bool
+    {
+        return self.is_enabled;
     }
 
     // pub fn map_page(&mut self, phys_addr: u32, virt_addr: VirtualAddress)

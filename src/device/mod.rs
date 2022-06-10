@@ -29,5 +29,13 @@ pub fn init()
 
     // usb3.0
     USB.lock().init(UsbMode::Xhci);
-    log_info("USB driver initialized");
+
+    if USB.lock().is_init()
+    {
+        log_info("USB driver initialized");
+    }
+    else
+    {
+        log_warn("Failed to initialize USB driver");
+    }
 }
