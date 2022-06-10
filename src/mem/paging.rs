@@ -371,6 +371,21 @@ impl Paging
         pte.clear_flag(PTE_FLAGS_P);
     }
 
+    pub fn get_total_mem_size(&self) -> u32
+    {
+        return self.phys_mem_manager.get_total_mem_size();
+    }
+
+    pub fn get_used_mem_size(&self) -> u32
+    {
+        return self.phys_mem_manager.get_allocated_blocks() * MEM_BLOCK_SIZE;
+    }
+
+    pub fn get_free_mem_size(&self) -> u32
+    {
+        return self.phys_mem_manager.get_free_blocks() * MEM_BLOCK_SIZE;
+    }
+
     fn get_page_directory_entry(&self, index: usize) -> PageDirectoryEntry
     {
         let phys = unsafe { &mut *((self.pd_block.mem_block_start_addr + index as u32 * 4) as *mut u32) };

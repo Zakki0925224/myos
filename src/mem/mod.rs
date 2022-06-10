@@ -28,3 +28,16 @@ pub fn init(boot_info: &BootInformation)
         log_warn("Failed to enable paging");
     }
 }
+
+pub fn free()
+{
+    if !PAGING.lock().is_enabled()
+    {
+        println!("Paging isn't enabled");
+        return;
+    }
+
+    println!("Total: {}B", PAGING.lock().get_total_mem_size());
+    println!("Used: {}B", PAGING.lock().get_used_mem_size());
+    println!("Free: {}B", PAGING.lock().get_free_mem_size());
+}

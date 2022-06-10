@@ -1,4 +1,4 @@
-use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::PCI, meta};
+use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::PCI, meta, mem};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -86,6 +86,7 @@ impl SystemConsole
         match chars
         {
             ['l', 's', 'p', 'c', 'i'] => self.do_process(|| PCI.lock().lspci()),
+            ['m', 'f', 'r', 'e', 'e'] => self.do_process(|| mem::free()),
             ['k', 'm', 'e', 't', 'a'] => self.do_process(|| meta::print_info()),
             _ => println!("\nUnknown command")
         }
@@ -95,8 +96,8 @@ impl SystemConsole
     {
         self.is_waiting_input = false;
         print!("\n");
-        log_info("Processing...");
+        //log_info("Processing...");
         func();
-        log_info("Done");
+        //log_info("Done");
     }
 }
