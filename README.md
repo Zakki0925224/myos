@@ -31,3 +31,4 @@ GRUBを使ったrust製自作OS
   - [ ] FAT32
 - [x] Memory management: Segmentation -> Paging
 - [x] Interrupts controller (PIC): Intel 8259A
+- [x] Built-In Shell
