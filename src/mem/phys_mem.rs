@@ -116,11 +116,6 @@ impl PhysicalMemoryManager
                 self.allocated_blocks -= 1;
                 self.free_blocks += 1;
 
-                if self.allocated_blocks < 5
-                {
-                    log_debug("i, ab, fb, mb_i", (i, self.allocated_blocks, self.free_blocks, mb_index));
-                }
-
                 mb_index += 1;
                 i += MEM_BLOCK_SIZE;
             }
