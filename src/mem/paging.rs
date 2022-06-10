@@ -385,7 +385,7 @@ impl Paging
 
     pub fn get_free_mem_size(&self) -> u32
     {
-        return self.phys_mem_manager.get_free_blocks() * MEM_BLOCK_SIZE;
+        return self.get_total_mem_size() - self.get_used_mem_size();
     }
 
     fn get_page_directory_entry(&self, index: usize) -> PageDirectoryEntry
