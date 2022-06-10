@@ -2,7 +2,7 @@ use core::ptr::{write_volatile, read_volatile};
 
 use multiboot2::BootInformation;
 
-use crate::{arch::asm, util::logger::log_info};
+use crate::arch::asm;
 
 use super::{phys_mem::{PhysicalMemoryManager, MemoryBlockInfo, MEM_BLOCK_SIZE}, virt_mem::VirtualAddress};
 
@@ -225,36 +225,40 @@ pub struct Paging
     phys_mem_manager: PhysicalMemoryManager,
     pd_block: MemoryBlockInfo,
     pt_blocks: [MemoryBlockInfo; 1024],
-    page_directory_addr_backup: u32
+    page_directory_addr_backup: u32,
+    is_enabled: bool
 }
 
 impl Paging
 {
-    pub fn new(boot_info: &BootInformation) -> Paging
+    pub fn new() -> Paging
     {
-        let mut phys_mem_manager = PhysicalMemoryManager::new(boot_info);
-        phys_mem_manager.init(boot_info);
-        let pd_block = phys_mem_manager.alloc_single_mem_block(); // allocate block for page directory memory
-        // allocate block for page table memory
-        let mut pt_blocks = [MemoryBlockInfo::new(); 1024];
-        for i in 0..1024
+        return Paging
         {
-            pt_blocks[i] = phys_mem_manager.alloc_single_mem_block();
-            // clear allocated block
-            phys_mem_manager.clear_mem_block(pt_blocks[i]);
-        }
-
-        // clear allocated block
-        phys_mem_manager.clear_mem_block(pd_block);
-
-        // back up cr3 address
-        let page_directory_addr_backup = asm::get_cr3();
-
-        return Paging { page_directory_addr_backup, phys_mem_manager, pd_block, pt_blocks };
+            phys_mem_manager: PhysicalMemoryManager::new(),
+            pd_block: MemoryBlockInfo::new(),
+            pt_blocks: [MemoryBlockInfo::new(); 1024],
+            page_directory_addr_backup: 0,
+            is_enabled: false
+        };
     }
 
-    pub fn init(&mut self)
+    pub fn init(&mut self, boot_info: &BootInformation)
     {
+        self.phys_mem_manager.init(boot_info);
+        self.pd_block = self.phys_mem_manager.alloc_single_mem_block(); // allocate block for page directory memory
+        self.phys_mem_manager.clear_mem_block(self.pd_block);
+        // allocate block for page table memory
+        for i in 0..self.pt_blocks.len()
+        {
+            self.pt_blocks[i] = self.phys_mem_manager.alloc_single_mem_block();
+            // clear allocated block
+            self.phys_mem_manager.clear_mem_block(self.pt_blocks[i]);
+        }
+
+        // back up cr3 address
+        self.page_directory_addr_backup = asm::get_cr3();
+
         // mapping physical and virtual address
         let mut i = 0;
         loop
@@ -316,7 +320,7 @@ impl Paging
     {
         asm::set_cr3(self.pd_block.mem_block_start_addr);
         asm::enable_paging();
-        log_info("Paging enabled");
+        self.is_enabled = true;
     }
 
     // pub fn map_page(&mut self, phys_addr: u32, virt_addr: VirtualAddress)

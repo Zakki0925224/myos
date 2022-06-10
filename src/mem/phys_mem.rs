@@ -42,26 +42,28 @@ pub struct PhysicalMemoryManager
 
 impl PhysicalMemoryManager
 {
-    pub fn new(boot_info: &BootInformation) -> PhysicalMemoryManager
+    pub fn new() -> PhysicalMemoryManager
     {
-        let total_mem_size = get_total_mem_size(boot_info) as u32;
-        let mem_blocks = total_mem_size / MEM_BLOCK_SIZE;
-        let (_, e) = get_multiboot_addr(boot_info);
-        let memmap_addr = (e + 1) as u32;
-
         return PhysicalMemoryManager
         {
-            total_mem_size,
-            mem_blocks,
-            allocated_blocks: mem_blocks,
+            total_mem_size: 0,
+            mem_blocks: 0,
+            allocated_blocks: 0,
             free_blocks: 0,
-            memmap_addr,
-            memmap_size: mem_blocks / u32::BITS * 4 // memmap size (byte)
+            memmap_addr: 0,
+            memmap_size: 0
         }
     }
 
     pub fn init(&mut self, boot_info: &BootInformation)
     {
+        self.total_mem_size = get_total_mem_size(boot_info) as u32;
+        self.mem_blocks = self.total_mem_size / MEM_BLOCK_SIZE;
+        self.allocated_blocks = self.mem_blocks;
+        let (_, e) = get_multiboot_addr(boot_info);
+        self.memmap_addr = (e + 1) as u32;
+        self.memmap_size = self.mem_blocks / u32::BITS * 4; // memmap size (byte)
+
         let all_mem_areas = get_all_mem_areas(boot_info);
 
         // set all blocks to allocated
