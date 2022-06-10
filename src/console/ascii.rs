@@ -129,7 +129,7 @@ pub enum AsciiCode
     SmallZ,
     LCurlyBracket,      // {
     VerticalLine,       // |
-    RCurltBracket,      // }
+    RCurlyBracket,      // }
     Tilde,              // ~
     Delete
 }
@@ -188,6 +188,17 @@ pub fn key_event_to_ascii_code(event: KeyEvent, modifier_keys_state: ModifierKey
             KeyCode::X => return Some(AsciiCode::SmallX),
             KeyCode::Y => return Some(AsciiCode::SmallY),
             KeyCode::Z => return Some(AsciiCode::SmallZ),
+            KeyCode::Subtract => return Some(AsciiCode::Hyphen),
+            KeyCode::Equal => return Some(AsciiCode::Equal),
+            KeyCode::Backtick => return Some(AsciiCode::GraveAccent),
+            KeyCode::BracketLeft => return Some(AsciiCode::LSquareBracket),
+            KeyCode::BracketRight => return Some(AsciiCode::RSquareBracket),
+            KeyCode::Backslash => return Some(AsciiCode::ReverseSolidus),
+            KeyCode::Semicolon => return Some(AsciiCode::Semiclon),
+            KeyCode::Quote => return Some(AsciiCode::Apostrophe),
+            KeyCode::Comma => return Some(AsciiCode::Comma),
+            KeyCode::Period => return Some(AsciiCode::FullStop),
+            KeyCode::Slash => return Some(AsciiCode::Solidius),
             _ => ()
         }
     }
@@ -195,6 +206,16 @@ pub fn key_event_to_ascii_code(event: KeyEvent, modifier_keys_state: ModifierKey
     {
         match event.code
         {
+            KeyCode::Num0 => return Some(AsciiCode::RParenthesis),
+            KeyCode::Num1 => return Some(AsciiCode::Exclamation),
+            KeyCode::Num2 => return Some(AsciiCode::At),
+            KeyCode::Num3 => return Some(AsciiCode::Hash),
+            KeyCode::Num4 => return Some(AsciiCode::Doll),
+            KeyCode::Num5 => return Some(AsciiCode::Percent),
+            KeyCode::Num6 => return Some(AsciiCode::CircumflexAccent),
+            KeyCode::Num7 => return Some(AsciiCode::Ampersand),
+            KeyCode::Num8 => return Some(AsciiCode::Asterisk),
+            KeyCode::Num9 => return Some(AsciiCode::LParenthesis),
             KeyCode::A => return Some(AsciiCode::LargeA),
             KeyCode::B => return Some(AsciiCode::LargeB),
             KeyCode::C => return Some(AsciiCode::LargeC),
@@ -221,6 +242,17 @@ pub fn key_event_to_ascii_code(event: KeyEvent, modifier_keys_state: ModifierKey
             KeyCode::X => return Some(AsciiCode::LargeX),
             KeyCode::Y => return Some(AsciiCode::LargeY),
             KeyCode::Z => return Some(AsciiCode::LargeZ),
+            KeyCode::Subtract => return Some(AsciiCode::LowLine),
+            KeyCode::Equal => return Some(AsciiCode::Plus),
+            KeyCode::Backtick => return Some(AsciiCode::Tilde),
+            KeyCode::BracketLeft => return Some(AsciiCode::LCurlyBracket),
+            KeyCode::BracketRight => return Some(AsciiCode::RCurlyBracket),
+            KeyCode::Backslash => return Some(AsciiCode::VerticalLine),
+            KeyCode::Semicolon => return Some(AsciiCode::Colon),
+            KeyCode::Quote => return Some(AsciiCode::Quotation),
+            KeyCode::Comma => return Some(AsciiCode::LessThan),
+            KeyCode::Period => return Some(AsciiCode::GreaterThan),
+            KeyCode::Slash => return Some(AsciiCode::Question),
             _ => ()
         }
     }

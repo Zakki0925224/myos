@@ -6,6 +6,8 @@ use self::ascii::AsciiCode;
 
 pub mod ascii;
 
+const CONSOLE_INPUT_CHARS_LIMIT: usize = 5;
+
 lazy_static!
 {
     static ref INPUTBUF: Mutex<Fifo> = Mutex::new(Fifo::new(128));
@@ -68,16 +70,15 @@ impl SystemConsole
 
     fn parse_input(&mut self)
     {
-        const limit: usize = 5;
-
-        if INPUTBUF.lock().status() == 0 || ((self.input_cnt as usize) < limit)
+        if INPUTBUF.lock().status() == 0 || ((self.input_cnt as usize) < CONSOLE_INPUT_CHARS_LIMIT)
         {
+            println!("\nUnknown command");
             return;
         }
 
-        let mut chars = [0x0 as char; limit];
+        let mut chars = [0x0 as char; CONSOLE_INPUT_CHARS_LIMIT];
 
-        for i in 0..5
+        for i in 0..CONSOLE_INPUT_CHARS_LIMIT
         {
             chars[i] = INPUTBUF.lock().get().unwrap() as char;
         }
@@ -85,8 +86,8 @@ impl SystemConsole
         match chars
         {
             ['l', 's', 'p', 'c', 'i'] => self.do_process(|| PCI.lock().lspci()),
-            ['k', 'n', 'a', 'm', 'e'] => self.do_process(|| println!("{}", meta::OS_NAME)),
-            _ => ()
+            ['k', 'm', 'e', 't', 'a'] => self.do_process(|| meta::print_info()),
+            _ => println!("\nUnknown command")
         }
     }
 
@@ -96,5 +97,6 @@ impl SystemConsole
         print!("\n");
         log_info("Processing...");
         func();
+        log_info("Done");
     }
 }

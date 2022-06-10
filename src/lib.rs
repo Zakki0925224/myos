@@ -48,7 +48,6 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 
     let mut console = SystemConsole::new();
     console.start();
-
     asm::sti();
 
     // #[cfg(test)]
