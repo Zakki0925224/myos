@@ -1,6 +1,6 @@
 use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-use crate::{println, util::{boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}, logger::log_debug}};
+use crate::{println, util::{boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}}};
 
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
@@ -69,7 +69,6 @@ impl PhysicalMemoryManager
         }
 
         self.mem_blocks = self.total_mem_size / MEM_BLOCK_SIZE;
-        log_debug("mem_blocks", self.mem_blocks);
         self.allocated_blocks = self.mem_blocks;
         self.free_blocks = 0;
         let (_, e) = get_multiboot_addr(boot_info);

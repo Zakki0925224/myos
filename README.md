@@ -15,6 +15,7 @@ GRUBを使ったrust製自作OS
 
 ## Features
 - [x] x86 support
+- [x] BIOS support
 - [x] Written in Rust and Assembly
 - [x] Boot loader: GRUB2
 - Screen rendering
@@ -25,7 +26,7 @@ GRUBを使ったrust製自作OS
   - [x] PS/2 Mouse
   - [ ] Serial: UART 16650
   - [ ] PCI connection
-    - [ ] SATA drive support
+    - [ ] SATA drive support (AHCI)
   - [ ] USB connection
 - File system support
   - [ ] FAT32

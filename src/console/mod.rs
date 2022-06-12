@@ -62,7 +62,7 @@ impl SystemConsole
     fn wait_input(&mut self)
     {
         print!("\n");
-        print!("root$ ");
+        print!("# ");
         INPUTBUF.lock().clear();
         self.input_cnt = 0;
         self.is_waiting_input = true;

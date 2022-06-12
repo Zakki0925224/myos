@@ -4,7 +4,6 @@ use crate::{arch::asm, println, print};
 
 pub const PCI_VENDOR_ID_INTEL: u16 = 0x8086;
 const PCI_CS32_DEVICE_NOT_EXIST: u32 = 0xffffffff;
-const PCI_CS32_FILL: u32 = 0xffffffff;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Pci
@@ -77,8 +76,7 @@ pub enum PciHeaderType
 pub enum BaseAddressRegisterType
 {
     MemorySpace,
-    IOSpace,
-    NoSpace
+    IOSpace
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -86,8 +84,14 @@ pub enum BaseAddressRegisterMemoryType
 {
     Bit32Space,
     Bit64Space,
-    Bit32SpaceUpTo1MB,
-    Bit64SpaceUpTo1MB
+    UpTo1MB
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BaseAddressRegister
+{
+    MemoryAddress(u32),
+    IOPort(u16)
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -301,121 +305,87 @@ impl PciDevice
         }
     }
 
-    pub fn get_base_addr_reg_type(&self) -> Option<BaseAddressRegisterType>
+    pub fn get_base_addr_reg_type(&self, index: usize) -> Option<BaseAddressRegisterType>
     {
+        if index > 5
+        {
+            return None;
+        }
+
         if self.get_header_type() != PciHeaderType::StandardPci
         {
             return None
         }
 
-        let config_space = self.config_space.raw_data;
-        let mut bar_type = BaseAddressRegisterType::NoSpace;
+        let bar = self.config_space.raw_data[index];
 
-        for i in 4..10
+        if bar == 0 || bar == PCI_CS32_DEVICE_NOT_EXIST
         {
-            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
-            {
-                continue;
-            }
-
-            // bit 0
-            if (config_space[i] & 0x1) != 0
-            {
-                bar_type = BaseAddressRegisterType::IOSpace;
-            }
-            else
-            {
-                bar_type = BaseAddressRegisterType::MemorySpace;
-            }
-
-            break;
+            return None;
         }
-
-        return Some(bar_type);
+        // bit0
+        else if (bar & 0x1) != 0
+        {
+            return Some(BaseAddressRegisterType::IOSpace);
+        }
+        else
+        {
+            return Some(BaseAddressRegisterType::MemorySpace);
+        }
     }
 
-    pub fn get_base_addr_mem_type(&self) -> Option<BaseAddressRegisterMemoryType>
+    pub fn get_base_addr_mem_type(&self, index: usize) -> Option<BaseAddressRegisterMemoryType>
     {
-        if self.get_base_addr_reg_type() != Some(BaseAddressRegisterType::MemorySpace)
+        if self.get_base_addr_reg_type(index) != Some(BaseAddressRegisterType::MemorySpace)
         {
             return None;
         }
 
-        let config_space = self.config_space.raw_data;
-        let mut mem_type = BaseAddressRegisterMemoryType::Bit32Space;
+        let bar = self.config_space.raw_data[index];
 
-        for i in 4..10
+        if bar == 0 || bar == PCI_CS32_DEVICE_NOT_EXIST
         {
-            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
-            {
-                continue;
-            }
-
-            let data = (config_space[i] as u8) & 0x6;
-
-            // bit 1~2
-            if data == 0
-            {
-                mem_type = BaseAddressRegisterMemoryType::Bit32Space;
-            }
-            else if data == 0x2
-            {
-                mem_type = BaseAddressRegisterMemoryType::Bit32SpaceUpTo1MB;
-            }
-            else if data == 0x4
-            {
-                mem_type = BaseAddressRegisterMemoryType::Bit64Space;
-            }
-            else if data == 0x6
-            {
-                mem_type = BaseAddressRegisterMemoryType::Bit64SpaceUpTo1MB;
-            }
-            else
-            {
-                panic!("Invalid base address register memory type");
-            }
-
-            break;
+            return None;
         }
-
-        return Some(mem_type);
+        else
+        {
+            match (bar as u8) & 0x6
+            {
+                0x0 => return Some(BaseAddressRegisterMemoryType::Bit32Space),
+                0x2 => return Some(BaseAddressRegisterMemoryType::UpTo1MB),
+                0x4 => return Some(BaseAddressRegisterMemoryType::Bit64Space),
+                0x6 => return Some(BaseAddressRegisterMemoryType::UpTo1MB),
+                _ => return None
+            }
+        }
     }
 
-    pub fn get_standard_base_addr(&self) -> Option<u32>
+    pub fn get_base_addr(&self, index: usize) -> Option<BaseAddressRegister>
     {
-
-        if self.get_header_type() != PciHeaderType::StandardPci
+        if index > self.get_base_addr_len()
         {
             return None;
         }
 
-        if self.get_base_addr_mem_type() == Some(BaseAddressRegisterMemoryType::Bit64Space) ||
-           self.get_base_addr_mem_type() == Some(BaseAddressRegisterMemoryType::Bit64SpaceUpTo1MB)
+        if self.get_base_addr_mem_type(index) == Some(BaseAddressRegisterMemoryType::Bit64Space) ||
+           self.get_base_addr_mem_type(index) == None
         {
             return None;
         }
 
-        let config_space = self.config_space.raw_data;
+        let bar = self.config_space.raw_data[index];
 
-        for i in 4..10
+        if bar == 0 || bar == PCI_CS32_DEVICE_NOT_EXIST
         {
-            if config_space[i] == 0 || config_space[i] == PCI_CS32_DEVICE_NOT_EXIST
-            {
-                continue;
-            }
-
-            if self.get_base_addr_reg_type() == Some(BaseAddressRegisterType::MemorySpace)
-            {
-                return Some(config_space[i] & !0xf);
-            }
-            else if self.get_base_addr_reg_type() == Some(BaseAddressRegisterType::IOSpace)
-            {
-                return Some(config_space[i] & !0x3);
-            }
-
+            return None;
         }
 
-        return None;
+        match self.get_base_addr_reg_type(index)
+        {
+            Some(BaseAddressRegisterType::MemorySpace) => return Some(BaseAddressRegister::MemoryAddress(bar >> 4)),
+            Some(BaseAddressRegisterType::IOSpace) => return Some(BaseAddressRegister::IOPort((bar >> 2) as u16)),
+            _ => return None
+        }
     }
 
     pub fn get_bist_reg(&self) -> u8
@@ -821,6 +791,16 @@ impl PciDevice
         ];
 
         return Some(regs);
+    }
+
+    pub fn get_base_addr_len(&self) -> usize
+    {
+        match self.get_header_type()
+        {
+            PciHeaderType::StandardPci => return 6,
+            PciHeaderType::PciToPciBridge => return 2,
+            PciHeaderType::CardBusBridge => return 0
+        }
     }
 
     pub fn is_multi_function_device(&self) -> bool
