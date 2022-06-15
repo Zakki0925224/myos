@@ -17,6 +17,8 @@ vars:
     LINKER_FILE: linker.ld
     OS_IMAGE_FILE: os.iso
     GRUB_FILE: grub.cfg
+    HDD_FILE: hdd.img
+    HDD_ROOT_DIR: root
 
     ASM_EX: .asm
     OBJ_EX: .o
@@ -26,7 +28,7 @@ vars:
     QEMU_DEVICES: |
         qemu-xhci
         ahci
-    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -d int -no-reboot -no-shutdown -m 4G {{range .QEMU_DEVICES | splitLines -}}{{if .}}-device {{.}} {{end}}{{end -}}
+    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -d int -no-reboot -no-shutdown -m 4G {{range .QEMU_DEVICES | splitLines -}}{{if .}}-device {{.}} {{end}}{{end -}} -hda {{$.OUTPUT_DIR}}/{{$.HDD_FILE}} -boot order=d
 
 
 tasks:
@@ -44,13 +46,20 @@ tasks:
             - cargo xbuild
 
     makeelf:
-        deps: [clear, rustb]
+        deps: [rustb]
         cmds:
             - |
                 {{range .X86_DIR_FILES | splitLines -}}
                 {{if .}}{{$.NASM}} {{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}} {{$.X86_DIR}}/{{.}}{{$.ASM_EX}}{{end}}
                 {{end -}}
                 {{.LD}} {{range .X86_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
+
+    makehdd:
+        cmds:
+            - dd if=/dev/zero of={{$.OUTPUT_DIR}}/{{$.HDD_FILE}} bs=1M count=40 # 40MB
+            - "mformat -i {{$.OUTPUT_DIR}}/{{$.HDD_FILE}} :: -F"
+            - "mcopy -i {{$.OUTPUT_DIR}}/{{$.HDD_FILE}} -s {{$.HDD_ROOT_DIR}} :: "
+
 
     build:
         deps: [makeelf]
@@ -64,6 +73,7 @@ tasks:
     run:
         deps: [build]
         cmds:
+            - task makehdd
             - "{{$.QEMU}}"
 
     debug:
