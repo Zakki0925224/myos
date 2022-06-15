@@ -21,19 +21,6 @@ pub fn init()
     PCI.lock().init();
     log_info("PCI initialized");
 
-    for device in PCI.lock().get_devices()
-    {
-        if device.is_exist() && device.get_header_type() == PciHeaderType::StandardPci
-        {
-            log_debug(device.get_device_name(), (device.get_base_class_code(), device.get_sub_class_code()));
-
-            for i in 0..device.get_base_addr_len()
-            {
-                log_debug("BAR", device.get_base_addr(i));
-            }
-        }
-    }
-
     // usb3.0
     USB.lock().init(UsbMode::Xhci);
 

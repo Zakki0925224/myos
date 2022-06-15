@@ -1,4 +1,4 @@
-use crate::{util::logger::{log_warn, log_debug}, device::{pci::PciDevice, PCI}};
+use crate::{util::logger::{log_warn, log_debug}, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -27,7 +27,7 @@ impl Ahci
                device.get_sub_class_code() == PCI_AHCI_SUB_CLASS_CODE
             {
                 self.pci_ahci_device = device;
-                break;
+                self.pci_ahci_device.dump_bar();
             }
         }
 
