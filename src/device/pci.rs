@@ -366,8 +366,8 @@ impl PciDevice
 
         match self.get_base_addr_reg_type(index)
         {
-            Some(BaseAddressRegisterType::MemorySpace) => result = Some(BaseAddressRegister::MemoryAddress32Bit(bar >> 4)),
-            Some(BaseAddressRegisterType::IOSpace) => result = Some((BaseAddressRegister::IOPort((bar >> 2) as u16))),
+            Some(BaseAddressRegisterType::MemorySpace) => result = Some(BaseAddressRegister::MemoryAddress32Bit(bar & !0xf)),
+            Some(BaseAddressRegisterType::IOSpace) => result = Some((BaseAddressRegister::IOPort((bar & !0x3) as u16))),
             _ => result = None
         }
 
@@ -377,11 +377,12 @@ impl PciDevice
 
             match result.unwrap()
             {
-                BaseAddressRegister::MemoryAddress32Bit(addr) => upper_addr = addr,
+                BaseAddressRegister::MemoryAddress32Bit(addr) => upper_addr = addr & !0xf,
                 _ => return None
             }
 
-            result = Some(BaseAddressRegister::MemoryAddress64Bit(((upper_addr as u64) << 16) | self.config_space.raw_data[index + 1] as u64));
+            let lower_addr = self.config_space.raw_data[index + 1] as u64;
+            result = Some(BaseAddressRegister::MemoryAddress64Bit(((upper_addr as u64) << 32) | lower_addr));
         }
 
         return result;

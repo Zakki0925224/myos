@@ -1,4 +1,4 @@
-use crate::{device::usb::{Usb, UsbMode}, util::logger::{log_info, log_debug, log_warn}};
+use crate::{device::usb::{Usb, UsbMode}, util::logger::{log_info, log_debug, log_warn}, println};
 use self::{pci::{Pci, PciHeaderType}, storage::ahci::Ahci};
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -38,6 +38,7 @@ pub fn init()
 
     if AHCI.lock().is_init()
     {
+        println!("Using {} AHCI ports", AHCI.lock().get_used_port_cnt());
         log_info("AHCI controller initialized");
     }
     else
