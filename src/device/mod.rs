@@ -38,7 +38,6 @@ pub fn init()
 
     if AHCI.lock().is_init()
     {
-        println!("Using {} AHCI ports", AHCI.lock().get_used_port_cnt());
         log_info("AHCI controller initialized");
     }
     else

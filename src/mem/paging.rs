@@ -368,7 +368,7 @@ impl Paging
     pub fn dealloc_single_page(&mut self, mem_block: MemoryBlockInfo)
     {
         self.phys_mem_manager.dealloc_single_mem_block(mem_block);
-        self.phys_mem_manager.clear_mem_block(mb_info);
+        self.phys_mem_manager.clear_mem_block(mem_block);
         let pd_i = self.get_page_directory_index(mem_block.mem_block_index);
         let pt_i = self.get_page_table_index(mem_block.mem_block_index);
         let mut pte = self.get_page_table_entry(pd_i, pt_i);

@@ -367,7 +367,7 @@ impl PciDevice
         match self.get_base_addr_reg_type(index)
         {
             Some(BaseAddressRegisterType::MemorySpace) => result = Some(BaseAddressRegister::MemoryAddress32Bit(bar & !0xf)),
-            Some(BaseAddressRegisterType::IOSpace) => result = Some((BaseAddressRegister::IOPort((bar & !0x3) as u16))),
+            Some(BaseAddressRegisterType::IOSpace) => result = Some(BaseAddressRegister::IOPort((bar & !0x3) as u16)),
             _ => result = None
         }
 
