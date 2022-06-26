@@ -12,6 +12,7 @@ GRUBを使ったrust製自作OS
 * xorriso
 * grub
 * ld
+* dd
 
 ## Features
 - [x] x86 support

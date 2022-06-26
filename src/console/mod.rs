@@ -1,4 +1,4 @@
-use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::PCI, meta, mem};
+use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -86,6 +86,7 @@ impl SystemConsole
         match chars
         {
             ['l', 's', 'p', 'c', 'i'] => self.do_process(|| PCI.lock().lspci()),
+            ['i', 'a', 'h', 'c', 'i'] => self.do_process(|| AHCI.lock().ahci_info()),
             ['m', 'f', 'r', 'e', 'e'] => self.do_process(|| mem::free()),
             ['k', 'm', 'e', 't', 'a'] => self.do_process(|| meta::print_info()),
             _ => println!("\nUnknown command")
