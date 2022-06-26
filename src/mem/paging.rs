@@ -226,6 +226,7 @@ pub struct Paging
     pd_block: MemoryBlockInfo,
     pt_blocks: [MemoryBlockInfo; 1024],
     page_directory_addr_backup: u32,
+    is_init: bool,
     is_enabled: bool
 }
 
@@ -239,6 +240,7 @@ impl Paging
             pd_block: MemoryBlockInfo::new(),
             pt_blocks: [MemoryBlockInfo::new(); 1024],
             page_directory_addr_backup: 0,
+            is_init: false,
             is_enabled: false
         };
     }
@@ -246,14 +248,29 @@ impl Paging
     pub fn init(&mut self, boot_info: &BootInformation)
     {
         self.phys_mem_manager.init(boot_info);
-        self.pd_block = self.phys_mem_manager.alloc_single_mem_block(); // allocate block for page directory memory
+
+        if let Some(mb_info) = self.phys_mem_manager.alloc_single_mem_block()
+        {
+            self.pd_block = mb_info;
+        }
+        else
+        {
+            return;
+        }
+
         self.phys_mem_manager.clear_mem_block(self.pd_block);
         // allocate block for page table memory
         for i in 0..self.pt_blocks.len()
         {
-            self.pt_blocks[i] = self.phys_mem_manager.alloc_single_mem_block();
-            // clear allocated block
-            self.phys_mem_manager.clear_mem_block(self.pt_blocks[i]);
+            if let Some(mb_info) = self.phys_mem_manager.alloc_single_mem_block()
+            {
+                self.pt_blocks[i] = mb_info;
+                self.phys_mem_manager.clear_mem_block(self.pt_blocks[i]);
+            }
+            else
+            {
+                return;
+            }
         }
 
         // back up cr3 address
@@ -264,21 +281,6 @@ impl Paging
         loop
         {
             let va = VirtualAddress::new(i);
-
-            // 0x0 to 0x0fffff match addresses
-            // if i < 0x100000
-            // {
-            //     va = VirtualAddress::new(i);
-            // }
-            // // 0x100000 to 0x3ff000
-            // else if i < 0x3ff000
-            // {
-            //     va = VirtualAddress::new(i + 0xbff00000);
-            // }
-            // else
-            // {
-            //     break;
-            // }
 
             let pd_i = va.get_page_directory_index();
             let pt_i = va.get_page_table_index();
@@ -302,24 +304,16 @@ impl Paging
             }
         }
 
-        // for i in 0..1024*1024
-        // {
-        //     if i % 1024 == 0
-        //     {
-        //         let index = self.get_page_directory_index(i);
-        //         let pde = self.get_page_directory_entry(index);
-        //         println!("PDE{}: PT addr: {:32b} -> 0x{:x}", index, pde.get_page_table_addr(), pde.get_page_table_addr());
-        //     }
-
-        //     let pd_i = self.get_page_directory_index(i);
-        //     let pt_i = self.get_page_table_index(i);
-        //     let pte = self.get_page_table_entry(pd_i, pt_i);
-        //     println!("\tPTE({})-{}: PF addr: {:32b} -> 0x{:x}", pd_i, pt_i, pte.get_page_frame_addr(), pte.get_page_frame_addr());
-        // }
+        self.is_init = true;
     }
 
     pub fn enable(&mut self)
     {
+        if !self.is_init()
+        {
+            return;
+        }
+
         asm::set_cr3(self.pd_block.mem_block_start_addr);
         asm::enable_paging();
         self.is_enabled = true;
@@ -330,43 +324,41 @@ impl Paging
         return self.is_enabled;
     }
 
-    // pub fn map_page(&mut self, phys_addr: u32, virt_addr: VirtualAddress)
-    // {
-    //     let pd_i = virt_addr.get_page_directory_index();
-    //     let pt_i = virt_addr.get_page_table_index();
-
-    //     let mut pde = self.get_page_directory_entry(pd_i);
-
-    //     if !pde.get_flag_present()
-    //     {
-    //         let mem_block = self.phys_mem_manager.alloc_single_mem_block();
-    //         // clear memory block
-    //         self.phys_mem_manager.clear_mem_block(mem_block);
-    //         // create new PDE
-    //         pde.set_flag(PDE_FLAGS_P | PDE_FLAGS_R_W);
-    //         pde.set_page_table_addr(mem_block.mem_block_start_addr);
-    //     }
-
-    //     // create new PTE
-    //     let mut pte = self.get_page_table_entry(pd_i, pt_i);
-    //     pte.set_flag(PTE_FLAGS_P | PTE_FLAGS_R_W);
-    //     pte.set_page_frame_addr(phys_addr);
-    // }
-
-    pub fn alloc_single_page(&mut self) -> MemoryBlockInfo
+    pub fn is_init(&self) -> bool
     {
-        let mb_info = self.phys_mem_manager.alloc_single_mem_block();
-        self.phys_mem_manager.clear_mem_block(mb_info);
-        let pd_i = self.get_page_directory_index(mb_info.mem_block_index);
-        let pt_i = self.get_page_table_index(mb_info.mem_block_index);
-        let mut pte = self.get_page_table_entry(pd_i, pt_i);
-        pte.set(mb_info.mem_block_start_addr, PTE_FLAGS_P);
+        return self.is_init;
+    }
 
-        return mb_info;
+    pub fn alloc_single_page(&mut self) -> Option<MemoryBlockInfo>
+    {
+        if !self.is_enabled()
+        {
+            return None;
+        }
+
+        if let Some(mb_info) = self.phys_mem_manager.alloc_single_mem_block()
+        {
+            self.phys_mem_manager.clear_mem_block(mb_info);
+            let pd_i = self.get_page_directory_index(mb_info.mem_block_index);
+            let pt_i = self.get_page_table_index(mb_info.mem_block_index);
+            let mut pte = self.get_page_table_entry(pd_i, pt_i);
+            pte.set(mb_info.mem_block_start_addr, PTE_FLAGS_P);
+
+            return Some(mb_info);
+        }
+        else
+        {
+            return None;
+        }
     }
 
     pub fn dealloc_single_page(&mut self, mem_block: MemoryBlockInfo)
     {
+        if !self.is_enabled()
+        {
+            return;
+        }
+
         self.phys_mem_manager.dealloc_single_mem_block(mem_block);
         self.phys_mem_manager.clear_mem_block(mem_block);
         let pd_i = self.get_page_directory_index(mem_block.mem_block_index);

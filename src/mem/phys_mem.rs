@@ -1,6 +1,6 @@
 use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-use crate::{println, util::{boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}}};
+use crate::{println, util::boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}};
 
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
@@ -131,11 +131,11 @@ impl PhysicalMemoryManager
 
     }
 
-    pub fn get_mem_block(&mut self, index: usize) -> MemoryBlockInfo
+    pub fn get_mem_block(&mut self, index: usize) -> Option<MemoryBlockInfo>
     {
         if index > self.mem_blocks as usize
         {
-            panic!("Memory block index out of range");
+            return None;
         }
 
         let memmap_addr = self.memmap_addr + index as u32 / 8;
@@ -143,14 +143,14 @@ impl PhysicalMemoryManager
         let mem_block_size = MEM_BLOCK_SIZE;
         let is_available = !self.is_allocated_mem_block(index);
 
-        return MemoryBlockInfo
+        return Some(MemoryBlockInfo
         {
             memmap_addr,
             mem_block_start_addr,
             mem_block_size,
             mem_block_index: index,
             is_available
-        }
+        });
     }
 
     fn get_first_free_mem_block(&mut self) -> MemoryBlockInfo
@@ -165,7 +165,7 @@ impl PhysicalMemoryManager
                 break;
             }
 
-            let ptr = self.memmap_ptr(i);
+            let ptr = self.memmap_ptr(i).unwrap();
 
             if unsafe { read_volatile(ptr) } == u32::MAX
             {
@@ -175,7 +175,11 @@ impl PhysicalMemoryManager
 
             if !self.is_allocated_mem_block(i)
             {
-                mem_block = self.get_mem_block(i);
+                if let Some(mb) = self.get_mem_block(i)
+                {
+                    mem_block = mb;
+                }
+
                 break;
             }
 
@@ -185,11 +189,11 @@ impl PhysicalMemoryManager
         return mem_block;
     }
 
-    pub fn alloc_single_mem_block(&mut self) -> MemoryBlockInfo
+    pub fn alloc_single_mem_block(&mut self) -> Option<MemoryBlockInfo>
     {
         if self.free_blocks <= 0
         {
-            panic!("No free memory blocks");
+            return None;
         }
 
         let free_mb = self.get_first_free_mem_block();
@@ -198,7 +202,11 @@ impl PhysicalMemoryManager
         self.free_blocks -= 1;
         self.allocated_blocks += 1;
 
-        return self.get_mem_block(free_mb.mem_block_index);
+        match self.get_mem_block(free_mb.mem_block_index)
+        {
+            Some(mb_info) => return Some(mb_info),
+            None => return None
+        }
     }
 
     pub fn dealloc_single_mem_block(&mut self, mem_block: MemoryBlockInfo)
@@ -270,7 +278,7 @@ impl PhysicalMemoryManager
 
     fn allocate_mem_block(&mut self, mem_block_index: usize)
     {
-        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize);
+        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize).unwrap();
         let mut tmp = unsafe { read_volatile(buffer) };
         tmp |= 1 << (mem_block_index % u32::BITS as usize);
         unsafe { write_volatile(buffer, tmp); }
@@ -278,7 +286,7 @@ impl PhysicalMemoryManager
 
     fn deallocate_mem_block(&mut self, mem_block_index: usize)
     {
-        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize);
+        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize).unwrap();
         let mut tmp = unsafe { read_volatile(buffer) };
         tmp &= !(1 << (mem_block_index % u32::BITS as usize));
         unsafe { write_volatile(buffer, tmp); }
@@ -286,18 +294,18 @@ impl PhysicalMemoryManager
 
     fn is_allocated_mem_block(&mut self, mem_block_index: usize) -> bool
     {
-        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize as usize);
+        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize as usize).unwrap();
         let tmp = unsafe { read_volatile(buffer) };
         return tmp & (1 << (mem_block_index % u32::BITS as usize)) > 0;
     }
 
-    fn memmap_ptr(&mut self, offset: usize) -> &mut u32
+    fn memmap_ptr(&mut self, offset: usize) -> Option<&mut u32>
     {
         if offset > self.memmap_size as usize
         {
-            panic!("Memory map offset out of range");
+            return None;
         }
 
-        return unsafe { &mut *((self.memmap_addr as *mut u32)).offset(offset as isize) };
+        return Some(unsafe { &mut *((self.memmap_addr as *mut u32)).offset(offset as isize) });
     }
 }

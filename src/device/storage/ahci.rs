@@ -1,6 +1,6 @@
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::{util::logger::{log_warn, log_debug}, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println};
+use crate::{util::logger::{log_warn, log_debug}, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::PAGING};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -14,6 +14,11 @@ const PORT_SIG_ATA: u32 = 0x101;        // SATA drive
 const PORT_SIG_ATAPI: u32 = 0xeb140101; // SATAPI drive
 const PORT_SIG_SEMB: u32 = 0xc33c0101;  // enclosure management bridge
 const PORT_SIG_PM: u32 = 0x96690101;    // port multiplier
+
+const PORT_CMD_ST_MASK: u32 = 0x1;
+const PORT_CMD_FRE_MASK: u32 = 0x10;
+const PORT_CMD_FR_MASK: u32 = 0x4000;
+const PORT_CMD_CR_MASK: u32 = 0x8000;
 
 #[derive(Debug, PartialEq)]
 enum PortType
@@ -164,6 +169,79 @@ impl Ahci
         return Some(((self.get_hba_mem_regs().port_impl >> port_num) & 0x1) != 0);
     }
 
+    fn init_port_mem_space(&self, port_num: usize)
+    {
+        if port_num > MAX_PORT_COUNT - 1
+        {
+            return;
+        }
+
+        let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
+
+        self.lock_port_cmd(port_num);
+
+        // setup command list memory area
+        if let Some(mb_info) = PAGING.lock().alloc_single_page()
+        {
+            port_ctrl_reg.cmd_list_base_addr_low = mb_info.mem_block_start_addr;
+            port_ctrl_reg.cmd_list_base_addr_high = 0;
+        }
+
+        // setup FIS memory area
+        if let Some(mb_info) = PAGING.lock().alloc_single_page()
+        {
+            port_ctrl_reg.fis_base_addr_low = mb_info.mem_block_start_addr;
+            port_ctrl_reg.fis_base_addr_high = 0;
+        }
+
+        // TODO: https://wiki.osdev.org/AHCI#AHCI port memory space initialization
+
+        self.unlock_port_cmd(port_num);
+    }
+
+    fn lock_port_cmd(&self, port_num: usize)
+    {
+        if port_num > MAX_PORT_COUNT - 1
+        {
+            return;
+        }
+
+        let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
+
+        // clear ST (bit0)
+        port_ctrl_reg.cmd &= !PORT_CMD_ST_MASK;
+        // clear FRE (bit4)
+        port_ctrl_reg.cmd &= !PORT_CMD_FRE_MASK;
+
+        // wait until FR (bit 14) and CR (bit15) are cleared
+        loop
+        {
+            if ((port_ctrl_reg.cmd & PORT_CMD_FR_MASK) != 0 ||
+                (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) != 0)
+            {
+                break;
+            }
+        }
+    }
+
+    fn unlock_port_cmd(&self, port_num: usize)
+    {
+        if port_num > MAX_PORT_COUNT - 1
+        {
+            return;
+        }
+
+        let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
+
+        // wait until CR (bit15) is cleared
+        while (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) != 0 {};
+
+        // set FRE (bit4)
+        port_ctrl_reg.cmd |= PORT_CMD_FRE_MASK;
+        // set ST (bit0)
+        port_ctrl_reg.cmd |= PORT_CMD_ST_MASK;
+    }
+
     pub fn is_init(&self) -> bool
     {
         return self.is_init;
@@ -187,10 +265,7 @@ pub struct HostBusAdapterMemoryRegisters
     pub bios_ho_ctrl: u32,
     reserved: [u32; 29],
 
-    // 0xa0 - 0xff vendor specific registers
     pub vendor_spec_regs: [u32; 24],
-
-    // 0x100 ~ port control registers
     pub port_ctrl_regs: [PortControlRegisters; MAX_PORT_COUNT]
 }
 
