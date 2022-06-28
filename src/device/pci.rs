@@ -147,7 +147,7 @@ impl PciDevice
 
     pub fn get_device_name(&self) -> &str
     {
-        let mut name = "Unknown";
+        let name = "Unknown";
 
         let vendor = Vendors::iter().find(|v| v.id() == self.get_vendor_id());
 
@@ -168,7 +168,7 @@ impl PciDevice
 
     pub fn get_vendor_name(&self) -> &str
     {
-        let mut name = "Unknown";
+        let name = "Unknown";
 
         let vendor = Vendors::iter().find(|v| v.id() == self.get_vendor_id());
 
@@ -222,7 +222,7 @@ impl PciDevice
 
     pub fn get_class_name(&self) -> &str
     {
-        let mut name = "Unknown";
+        let name = "Unknown";
 
         let class = Classes::iter().find(|c| c.id() == self.get_base_class_code());
 
@@ -236,7 +236,7 @@ impl PciDevice
 
     pub fn get_sub_class_name(&self) -> &str
     {
-        let mut name = "Unknown";
+        let name = "Unknown";
 
         let class = Classes::iter().find(|c| c.id() == self.get_base_class_code());
 
@@ -257,7 +257,7 @@ impl PciDevice
 
     pub fn get_program_interface_class_name(&self) -> &str
     {
-        let mut name = "Unknown";
+        let name = "Unknown";
 
         let class = Classes::iter().find(|c| c.id() == self.get_base_class_code());
 

@@ -39,7 +39,8 @@ pub enum Color
 
 pub struct VgaScreen
 {
-    color_code: u8,
+    default_color_code: u8,
+    current_color_code: u8,
     cursor_x: usize,
     cursor_y: usize,
     serial_port: SerialPort
@@ -56,10 +57,12 @@ impl VgaScreen
     {
         let mut serial_port = SerialPort::new(com_port);
         serial_port.init();
+        let default_color_code = (back_color as u8) << 4 | (fore_color as u8);
 
         let mut screen = VgaScreen
         {
-            color_code: (back_color as u8) << 4 | (fore_color as u8),
+            default_color_code,
+            current_color_code: default_color_code,
             cursor_x: 1,
             cursor_y: 1,
             serial_port
@@ -71,7 +74,12 @@ impl VgaScreen
 
     pub fn set_color(&mut self, fore_color: Color, back_color: Color)
     {
-        self.color_code = (back_color as u8) << 4 | (fore_color as u8);
+        self.current_color_code = (back_color as u8) << 4 | (fore_color as u8);
+    }
+
+    pub fn reset_color(&mut self)
+    {
+        self.current_color_code = self.default_color_code;
     }
 
     pub fn write_char(&mut self, c: char)
@@ -85,7 +93,7 @@ impl VgaScreen
             _ =>
             {
                 self.write_data(c as u8, offset);
-                self.write_data(self.color_code, offset + 1);
+                self.write_data(self.current_color_code, offset + 1);
 
                 self.serial_port.send_data(c as u8);
                 self.inc_cursor();
@@ -99,6 +107,15 @@ impl VgaScreen
         {
             self.write_char(c);
         }
+    }
+
+    pub fn write_color_block(&mut self, color: Color)
+    {
+        let c = self.current_color_code;
+        self.current_color_code = (color as u8) << 4 | c & 0x15;
+        self.write_char(' ');
+        self.write_char(' ');
+        self.current_color_code = c;
     }
 
     pub fn cls(&mut self)

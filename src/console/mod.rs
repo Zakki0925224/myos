@@ -1,4 +1,4 @@
-use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem};
+use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem, arch::vga::{VGA_SCREEN, Color}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -29,6 +29,22 @@ impl SystemConsole
     pub fn start(&mut self)
     {
         log_info("Starting built-in console...");
+        VGA_SCREEN.lock().write_color_block(Color::Black);
+        VGA_SCREEN.lock().write_color_block(Color::Blue);
+        VGA_SCREEN.lock().write_color_block(Color::Green);
+        VGA_SCREEN.lock().write_color_block(Color::Cyan);
+        VGA_SCREEN.lock().write_color_block(Color::Red);
+        VGA_SCREEN.lock().write_color_block(Color::Magenta);
+        VGA_SCREEN.lock().write_color_block(Color::Brown);
+        VGA_SCREEN.lock().write_color_block(Color::LightGray);
+        VGA_SCREEN.lock().write_color_block(Color::DarkGray);
+        VGA_SCREEN.lock().write_color_block(Color::LightBlue);
+        VGA_SCREEN.lock().write_color_block(Color::LightGreen);
+        VGA_SCREEN.lock().write_color_block(Color::LightCyan);
+        VGA_SCREEN.lock().write_color_block(Color::LightRed);
+        VGA_SCREEN.lock().write_color_block(Color::LightMagenta);
+        VGA_SCREEN.lock().write_color_block(Color::Yellow);
+        VGA_SCREEN.lock().write_color_block(Color::White);
         self.wait_input();
     }
 
@@ -89,6 +105,7 @@ impl SystemConsole
             ['i', 'a', 'h', 'c', 'i'] => self.do_process(|| AHCI.lock().ahci_info()),
             ['m', 'f', 'r', 'e', 'e'] => self.do_process(|| mem::free()),
             ['k', 'm', 'e', 't', 'a'] => self.do_process(|| meta::print_info()),
+            ['c', 'l', 'e', 'a', 'r'] => self.do_process(|| VGA_SCREEN.lock().cls()),
             _ => println!("\nUnknown command")
         }
     }

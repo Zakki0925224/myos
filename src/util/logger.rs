@@ -35,5 +35,5 @@ fn set_vga_color(fore_color: Color)
 
 fn reset_vga_color()
 {
-    VGA_SCREEN.lock().set_color(Color::White, Color::Black);
+    VGA_SCREEN.lock().reset_color();
 }
