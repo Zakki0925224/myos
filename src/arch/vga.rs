@@ -2,6 +2,8 @@ use core::{fmt::{self, Write}, ptr::{write_volatile, read_volatile}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
+use crate::device::serial::{SerialPort, IO_PORT_COM1};
+
 const VGA_HEIGHT: usize = 25;
 const VGA_WIDTH: usize = 80;
 const VGA_MEM: u32 = 0xb8000;
@@ -11,7 +13,7 @@ const TAB_INDENT_SIZE: usize = 4;
 
 lazy_static!
 {
-    pub static ref VGA_SCREEN: Mutex<VgaScreen> = Mutex::new(VgaScreen::new(Color::White, Color::Black));
+    pub static ref VGA_SCREEN: Mutex<VgaScreen> = Mutex::new(VgaScreen::new(Color::White, Color::Black, IO_PORT_COM1));
 }
 
 #[derive(Debug)]
@@ -39,7 +41,8 @@ pub struct VgaScreen
 {
     color_code: u8,
     cursor_x: usize,
-    cursor_y: usize
+    cursor_y: usize,
+    serial_port: SerialPort
 }
 
 fn convert_curosr_pos_to_offset(x: usize, y: usize) -> usize
@@ -49,13 +52,17 @@ fn convert_curosr_pos_to_offset(x: usize, y: usize) -> usize
 
 impl VgaScreen
 {
-    pub fn new(fore_color: Color, back_color: Color) -> VgaScreen
+    pub fn new(fore_color: Color, back_color: Color, com_port: u32) -> VgaScreen
     {
+        let mut serial_port = SerialPort::new(com_port);
+        serial_port.init();
+
         let mut screen = VgaScreen
         {
             color_code: (back_color as u8) << 4 | (fore_color as u8),
             cursor_x: 1,
-            cursor_y: 1
+            cursor_y: 1,
+            serial_port
         };
         screen.cls();
 
@@ -79,6 +86,8 @@ impl VgaScreen
             {
                 self.write_data(c as u8, offset);
                 self.write_data(self.color_code, offset + 1);
+
+                self.serial_port.send_data(c as u8);
                 self.inc_cursor();
             }
         }
@@ -123,6 +132,7 @@ impl VgaScreen
 
     fn new_line(&mut self)
     {
+        self.serial_port.send_data('\n' as u8);
         for _i in self.cursor_x..=VGA_WIDTH
         {
             self.inc_cursor();

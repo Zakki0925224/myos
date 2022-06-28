@@ -7,6 +7,7 @@ pub mod storage;
 pub mod keyboard;
 pub mod pci;
 pub mod usb;
+pub mod serial;
 
 lazy_static!
 {
