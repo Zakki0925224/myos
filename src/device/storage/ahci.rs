@@ -187,14 +187,14 @@ impl Ahci
             port_ctrl_reg.cmd_list_base_addr_high = 0;
         }
 
-        // setup FIS memory area
+        // setup FIS struct memory area
         if let Some(mb_info) = PAGING.lock().alloc_single_page()
         {
             port_ctrl_reg.fis_base_addr_low = mb_info.mem_block_start_addr;
             port_ctrl_reg.fis_base_addr_high = 0;
         }
 
-        // TODO: https://wiki.osdev.org/AHCI#AHCI port memory space initialization
+
 
         self.unlock_port_cmd(port_num);
     }
@@ -291,4 +291,47 @@ pub struct PortControlRegisters
     pub fis_switch_ctrl: u32,
     reserved1: [u32; 11],
     pub vendor_spec: [u32; 4]
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct CommandHeader
+{
+    dw0: u32,
+    dw1: u32,
+    dw2: u32,
+    dw3: u32,
+    reserved: [u32; 4]
+}
+
+impl CommandHeader
+{
+    pub fn get_prdtl(&self) -> u16
+    {
+        return (self.dw0 >> 16) as u16;
+    }
+
+    pub fn set_prdtl(&mut self, prdtl: u16)
+    {
+        self.dw0 |= (prdtl as u32) << 16;
+    }
+
+    pub fn get_cmd_table_base_addr_low(&self) -> u32
+    {
+        return self.dw2;
+    }
+
+    pub fn set_cmd_table_base_addr_low(&mut self, base_addr: u32)
+    {
+        self.dw2 = base_addr;
+    }
+
+    pub fn get_cmd_table_base_addr_high(&self) -> u32
+    {
+        return self.dw3;
+    }
+
+    pub fn set_cmd_table_base_addr_high(&mut self, base_addr: u32)
+    {
+        self.dw3 = base_addr;
+    }
 }

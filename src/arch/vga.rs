@@ -2,7 +2,7 @@ use core::{fmt::{self, Write}, ptr::{write_volatile, read_volatile}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::device::serial::{SerialPort, IO_PORT_COM1};
+use crate::{device::serial::{SerialPort, IO_PORT_COM1}, util::logger::log_debug};
 
 const VGA_HEIGHT: usize = 25;
 const VGA_WIDTH: usize = 80;
@@ -77,6 +77,18 @@ impl VgaScreen
         self.current_color_code = (back_color as u8) << 4 | (fore_color as u8);
     }
 
+    pub fn set_fore_color(&mut self, fore_color: Color)
+    {
+        let c = self.current_color_code;
+        self.current_color_code = c & 0xf0 | fore_color as u8;
+    }
+
+    pub fn set_back_color(&mut self, back_color: Color)
+    {
+        let c = self.current_color_code;
+        self.current_color_code = (back_color as u8) << 4 | c & 0xf;
+    }
+
     pub fn reset_color(&mut self)
     {
         self.current_color_code = self.default_color_code;
@@ -94,8 +106,7 @@ impl VgaScreen
             {
                 self.write_data(c as u8, offset);
                 self.write_data(self.current_color_code, offset + 1);
-
-                self.serial_port.send_data(c as u8);
+                self.write_to_serial(c);
                 self.inc_cursor();
             }
         }
@@ -129,6 +140,12 @@ impl VgaScreen
         self.cursor_y = 1;
     }
 
+    // TODO: support escape sequence
+    fn write_to_serial(&self, c: char)
+    {
+        self.serial_port.send_data(c as u8);
+    }
+
     fn write_data(&mut self, data: u8, offset: isize)
     {
         unsafe
@@ -149,7 +166,7 @@ impl VgaScreen
 
     fn new_line(&mut self)
     {
-        self.serial_port.send_data('\n' as u8);
+        self.write_to_serial('\n');
         for _i in self.cursor_x..=VGA_WIDTH
         {
             self.inc_cursor();

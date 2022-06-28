@@ -66,7 +66,6 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
             if !e.eq(&None)
             {
                 let asc = ascii::key_event_to_ascii_code(e.unwrap().0, e.unwrap().1);
-                //log_debug("keyboard", (e.unwrap().0, e.unwrap().1));
 
                 if !asc.eq(&None) && console.is_waiting_input()
                 {
@@ -91,7 +90,7 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 #[panic_handler]
 fn panic(info: &PanicInfo) -> !
 {
-    VGA_SCREEN.lock().set_color(Color::Red, Color::Black);
+    VGA_SCREEN.lock().set_fore_color(Color::Red);
     println!("{}", info);
     loop {};
 }

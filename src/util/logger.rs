@@ -30,7 +30,7 @@ pub fn log_error(msg: &str)
 
 fn set_vga_color(fore_color: Color)
 {
-    VGA_SCREEN.lock().set_color(fore_color, Color::Black);
+    VGA_SCREEN.lock().set_fore_color(fore_color);
 }
 
 fn reset_vga_color()

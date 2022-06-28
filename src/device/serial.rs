@@ -1,4 +1,4 @@
-use crate::{arch::asm, util::logger::log_warn};
+use crate::{arch::asm, util::logger::{log_warn, log_info}};
 
 pub const IO_PORT_COM1: u32 = 0x3f8;
 pub const IO_PORT_COM2: u32 = 0x2f8;
@@ -43,7 +43,6 @@ impl SerialPort
 
         // if serial isn't faulty, set normal mode
         asm::out8(self.io_port + 4, 0x0f);
-
         self.is_init = true;
     }
 
