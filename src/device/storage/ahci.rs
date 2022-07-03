@@ -65,7 +65,7 @@ impl Ahci
 
         let base_addr = self.pci_ahci_device.get_base_addr(PCI_AHCI_BASE_ADDR_INDEX);
 
-        if let Some(BaseAddressRegister::MemoryAddress32Bit((addr))) = base_addr
+        if let Some(BaseAddressRegister::MemoryAddress32Bit(addr)) = base_addr
         {
             self.hba_base_addr = addr;
         }
@@ -78,7 +78,8 @@ impl Ahci
         // init port memory space
         for i in 0..32
         {
-            if let Some(_) = self.get_port_type(i)
+            if self.get_port_type(i) != None &&
+               self.is_impl_port(i) != None
             {
                 self.init_port_mem_space(i);
             }
@@ -95,6 +96,11 @@ impl Ahci
 
     pub fn get_port_type(&self, port_num: usize) -> Option<PortType>
     {
+        if port_num > MAX_PORT_COUNT - 1
+        {
+            return None;
+        }
+
         let status = self.get_hba_mem_regs().port_ctrl_regs[port_num].sata_status;
         let sig = self.get_hba_mem_regs().port_ctrl_regs[port_num].sig;
         let ipm = ((status >> 8) & 0xf) as u8;
@@ -186,11 +192,11 @@ impl Ahci
         }
 
         let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
-
         self.lock_port_cmd(port_num);
 
         // setup command list memory area
         let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+
         if mb_info != None
         {
             port_ctrl_reg.cmd_list_base_addr_low = mb_info.unwrap().mem_block_start_addr;
@@ -205,6 +211,7 @@ impl Ahci
                 if mem_area == None
                 {
                     log_error("Failed to initialize port memory spaces");
+                    self.unlock_port_cmd(port_num);
                     return;
                 }
 
@@ -228,12 +235,11 @@ impl Ahci
                 cmd_header.set_cmd_table_base_addr_low(cmd_table_base_addr);
                 cmd_header.set_cmd_table_base_addr_high(0);
             }
-
-            println!("Port{} memory space initialized", port_num);
         }
         else
         {
-            println!("Failed to initialize port{} memory space", port_num);
+            self.unlock_port_cmd(port_num);
+            return;
         }
 
         // setup FIS struct memory area
@@ -243,8 +249,14 @@ impl Ahci
             port_ctrl_reg.fis_base_addr_low = mb_info.unwrap().mem_block_start_addr;
             port_ctrl_reg.fis_base_addr_high = 0;
         }
+        else
+        {
+            println!("Failed to initialize port{} memory space", port_num);
+        }
 
         self.unlock_port_cmd(port_num);
+
+        println!("Port{} memory space initialized", port_num);
     }
 
     fn lock_port_cmd(&self, port_num: usize)
@@ -261,11 +273,12 @@ impl Ahci
         // clear FRE (bit4)
         port_ctrl_reg.cmd &= !PORT_CMD_FRE_MASK;
 
-        // wait until FR (bit 14) and CR (bit15) are cleared
+        //wait until FR (bit 14) and CR (bit15) are cleared
         loop
         {
-            if ((port_ctrl_reg.cmd & PORT_CMD_FR_MASK) != 0 ||
-                (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) != 0)
+            println!("waiting...");
+            if (port_ctrl_reg.cmd & PORT_CMD_FR_MASK) == 0 &&
+               (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) == 0
             {
                 break;
             }
