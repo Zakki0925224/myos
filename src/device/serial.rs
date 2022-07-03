@@ -1,4 +1,4 @@
-use crate::{arch::asm, util::logger::{log_warn, log_info}};
+use crate::{arch::asm, util::logger::*};
 
 pub const IO_PORT_COM1: u32 = 0x3f8;
 pub const IO_PORT_COM2: u32 = 0x2f8;

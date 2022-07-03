@@ -1,4 +1,6 @@
-use crate::{util::logger::{log_warn, log_debug}, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::PHYS_MEM_MANAGER};
+use multiboot2::ElfSection;
+
+use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -71,6 +73,15 @@ impl Ahci
         {
             log_warn("AHCI BAR#5 not found");
             return;
+        }
+
+        // init port memory space
+        for i in 0..32
+        {
+            if let Some(_) = self.get_port_type(i)
+            {
+                self.init_port_mem_space(i);
+            }
         }
 
         self.is_init = true;
@@ -179,20 +190,59 @@ impl Ahci
         self.lock_port_cmd(port_num);
 
         // setup command list memory area
-        if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
+        let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+        if mb_info != None
         {
-            port_ctrl_reg.cmd_list_base_addr_low = mb_info.mem_block_start_addr;
+            port_ctrl_reg.cmd_list_base_addr_low = mb_info.unwrap().mem_block_start_addr;
             port_ctrl_reg.cmd_list_base_addr_high = 0;
+
+            // allocate memory areas for command table
+            let mut mem_areas = [MemoryBlockInfo::new(); 16];
+            for i in 0..16
+            {
+                let mem_area = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+
+                if mem_area == None
+                {
+                    log_error("Failed to initialize port memory spaces");
+                    return;
+                }
+
+                mem_areas[i] = mem_area.unwrap();
+            }
+
+            //set command headers
+            for i in 0..32
+            {
+                let addr = port_ctrl_reg.cmd_list_base_addr_low + i as u32;
+                let cmd_header = unsafe { &mut *(addr as *mut CommandHeader) };
+                cmd_header.set_prdtl(8); // 8 ptrd entry per command table
+
+                let mut cmd_table_base_addr = mem_areas[i / 2].mem_block_start_addr;
+
+                if i % 2 != 0
+                {
+                    cmd_table_base_addr += MEM_BLOCK_SIZE / 2;
+                }
+
+                cmd_header.set_cmd_table_base_addr_low(cmd_table_base_addr);
+                cmd_header.set_cmd_table_base_addr_high(0);
+            }
+
+            println!("Port{} memory space initialized", port_num);
+        }
+        else
+        {
+            println!("Failed to initialize port{} memory space", port_num);
         }
 
         // setup FIS struct memory area
-        if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
+        let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+        if mb_info != None
         {
-            port_ctrl_reg.fis_base_addr_low = mb_info.mem_block_start_addr;
+            port_ctrl_reg.fis_base_addr_low = mb_info.unwrap().mem_block_start_addr;
             port_ctrl_reg.fis_base_addr_high = 0;
         }
-
-
 
         self.unlock_port_cmd(port_num);
     }

@@ -1,4 +1,4 @@
-use crate::{println, util::logger::{log_info, log_warn}, mem::paging::Paging};
+use crate::{println, util::logger::*, mem::paging::Paging};
 use multiboot2::BootInformation;
 use lazy_static::lazy_static;
 use spin::Mutex;

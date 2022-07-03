@@ -2,7 +2,7 @@ use core::{fmt::{self, Write}, ptr::{write_volatile, read_volatile}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::{device::serial::{SerialPort, IO_PORT_COM1}, util::logger::log_debug};
+use crate::device::serial::{SerialPort, IO_PORT_COM1};
 
 const VGA_HEIGHT: usize = 25;
 const VGA_WIDTH: usize = 80;

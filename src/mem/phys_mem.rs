@@ -1,6 +1,6 @@
 use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-use crate::{println, util::{boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}, logger::log_info}};
+use crate::{println, util::{boot_info::*, logger::*}};
 
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
@@ -190,9 +190,11 @@ impl PhysicalMemoryManager
 
     pub fn alloc_single_mem_block(&mut self) -> Option<MemoryBlockInfo>
     {
+        let mut result = None;
+
         if self.free_blocks <= 0
         {
-            return None;
+            result = None;
         }
 
         let free_mb = self.get_first_free_mem_block();
@@ -203,9 +205,16 @@ impl PhysicalMemoryManager
 
         match self.get_mem_block(free_mb.mem_block_index)
         {
-            Some(mb_info) => return Some(mb_info),
-            None => return None
+            Some(mb_info) => result = Some(mb_info),
+            None => result = None
         }
+
+        if result == None
+        {
+            log_error("Failed to allocate memory block");
+        }
+
+        return result;
     }
 
     pub fn dealloc_single_mem_block(&mut self, mem_block: MemoryBlockInfo)

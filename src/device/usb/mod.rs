@@ -1,4 +1,4 @@
-use crate::util::logger::{log_debug, log_info, log_warn};
+use crate::util::logger::*;
 
 use super::{pci::{PciDevice, Pci, PCI_VENDOR_ID_INTEL}, PCI};
 

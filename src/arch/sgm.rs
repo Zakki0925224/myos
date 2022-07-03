@@ -1,4 +1,4 @@
-use crate::{handler, util::logger::log_info};
+use crate::{handler, util::logger::*};
 
 use super::asm;
 

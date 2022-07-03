@@ -1,4 +1,4 @@
-use crate::util::logger::log_debug;
+use crate::util::logger::*;
 
 // https://wiki.osdev.org/PS2_Keyboard
 // scan code set 1

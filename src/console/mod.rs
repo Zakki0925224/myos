@@ -1,4 +1,4 @@
-use crate::{print, println, util::logger::{log_info, log_debug, log_warn}, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem, arch::vga::{VGA_SCREEN, Color}};
+use crate::{print, println, util::logger::*, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem, arch::vga::{VGA_SCREEN, Color}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 

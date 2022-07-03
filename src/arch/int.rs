@@ -1,6 +1,6 @@
 // intel 8259A interrupt controller on PC/AT
 
-use crate::{data::fifo::Fifo, util::logger::log_info};
+use crate::{data::fifo::Fifo, util::logger::*};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
