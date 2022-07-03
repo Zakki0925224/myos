@@ -1,6 +1,6 @@
 use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-use crate::{println, util::boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}};
+use crate::{println, util::{boot_info::{get_total_mem_size, get_multiboot_addr, get_all_mem_areas}, logger::log_info}};
 
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
@@ -11,7 +11,7 @@ pub struct MemoryBlockInfo
     pub mem_block_start_addr: u32,
     pub mem_block_size: u32,
     pub mem_block_index: usize,
-    pub is_available: bool
+    pub is_used: bool
 }
 
 impl MemoryBlockInfo
@@ -24,7 +24,7 @@ impl MemoryBlockInfo
             mem_block_start_addr: 0,
             mem_block_size: 0,
             mem_block_index: 0,
-            is_available: false
+            is_used: false
         };
     }
 }
@@ -128,7 +128,6 @@ impl PhysicalMemoryManager
                 self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
             }
         }
-
     }
 
     pub fn get_mem_block(&mut self, index: usize) -> Option<MemoryBlockInfo>
@@ -141,7 +140,7 @@ impl PhysicalMemoryManager
         let memmap_addr = self.memmap_addr + index as u32 / 8;
         let mem_block_start_addr = index as u32 * MEM_BLOCK_SIZE;
         let mem_block_size = MEM_BLOCK_SIZE;
-        let is_available = !self.is_allocated_mem_block(index);
+        let is_used = self.is_allocated_mem_block(index);
 
         return Some(MemoryBlockInfo
         {
@@ -149,7 +148,7 @@ impl PhysicalMemoryManager
             mem_block_start_addr,
             mem_block_size,
             mem_block_index: index,
-            is_available
+            is_used
         });
     }
 
@@ -211,7 +210,7 @@ impl PhysicalMemoryManager
 
     pub fn dealloc_single_mem_block(&mut self, mem_block: MemoryBlockInfo)
     {
-        if !mem_block.is_available
+        if mem_block.is_used
         {
             self.deallocate_mem_block(mem_block.mem_block_index);
             self.free_blocks += 1;
@@ -244,6 +243,16 @@ impl PhysicalMemoryManager
     pub fn get_total_mem_size(&self) -> u32
     {
         return self.total_mem_size;
+    }
+
+    pub fn get_free_mem_size(&self) -> u32
+    {
+        return self.total_mem_size - self.allocated_blocks * MEM_BLOCK_SIZE;
+    }
+
+    pub fn get_used_mem_size(&self) -> u32
+    {
+        return self.allocated_blocks * MEM_BLOCK_SIZE;
     }
 
     pub fn get_mem_blocks(&self) -> u32

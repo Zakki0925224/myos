@@ -2,9 +2,9 @@ use core::ptr::{write_volatile, read_volatile};
 
 use multiboot2::BootInformation;
 
-use crate::arch::asm;
+use crate::{arch::asm, println};
 
-use super::{phys_mem::{PhysicalMemoryManager, MemoryBlockInfo, MEM_BLOCK_SIZE}, virt_mem::VirtualAddress};
+use super::{phys_mem::{PhysicalMemoryManager, MemoryBlockInfo, MEM_BLOCK_SIZE}, virt_mem::VirtualAddress, PHYS_MEM_MANAGER};
 
 const PDE_PAGE_TABLE_ADDR_MASK: u32 = 0xfffff000;
 const PDE_PAGE_TABLE_ADDR_MAX: u32 = 0xfffff;
@@ -222,7 +222,6 @@ impl PageDirectoryEntry
 #[derive(Debug, PartialEq, Eq)]
 pub struct Paging
 {
-    phys_mem_manager: PhysicalMemoryManager,
     pd_block: MemoryBlockInfo,
     pt_blocks: [MemoryBlockInfo; 1024],
     page_directory_addr_backup: u32,
@@ -236,7 +235,6 @@ impl Paging
     {
         return Paging
         {
-            phys_mem_manager: PhysicalMemoryManager::new(),
             pd_block: MemoryBlockInfo::new(),
             pt_blocks: [MemoryBlockInfo::new(); 1024],
             page_directory_addr_backup: 0,
@@ -245,11 +243,9 @@ impl Paging
         };
     }
 
-    pub fn init(&mut self, boot_info: &BootInformation)
+    pub fn init(&mut self)
     {
-        self.phys_mem_manager.init(boot_info);
-
-        if let Some(mb_info) = self.phys_mem_manager.alloc_single_mem_block()
+        if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
         {
             self.pd_block = mb_info;
         }
@@ -258,19 +254,14 @@ impl Paging
             return;
         }
 
-        self.phys_mem_manager.clear_mem_block(self.pd_block);
+        PHYS_MEM_MANAGER.lock().clear_mem_block(self.pd_block);
+
         // allocate block for page table memory
         for i in 0..self.pt_blocks.len()
         {
-            if let Some(mb_info) = self.phys_mem_manager.alloc_single_mem_block()
-            {
-                self.pt_blocks[i] = mb_info;
-                self.phys_mem_manager.clear_mem_block(self.pt_blocks[i]);
-            }
-            else
-            {
-                return;
-            }
+            let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+            self.pt_blocks[i] = mb_info.unwrap();
+            PHYS_MEM_MANAGER.lock().clear_mem_block(self.pt_blocks[i]);
         }
 
         // back up cr3 address
@@ -294,7 +285,7 @@ impl Paging
                 pde.set(pt_block.mem_block_start_addr, PDE_FLAGS_P | PDE_FLAGS_R_W);
             }
 
-            if u32::MAX - i < MEM_BLOCK_SIZE || i + MEM_BLOCK_SIZE > self.phys_mem_manager.get_total_mem_size()
+            if u32::MAX - i < MEM_BLOCK_SIZE || i + MEM_BLOCK_SIZE > PHYS_MEM_MANAGER.lock().get_total_mem_size()
             {
                 break;
             }
@@ -336,9 +327,9 @@ impl Paging
             return None;
         }
 
-        if let Some(mb_info) = self.phys_mem_manager.alloc_single_mem_block()
+        if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
         {
-            self.phys_mem_manager.clear_mem_block(mb_info);
+            PHYS_MEM_MANAGER.lock().clear_mem_block(mb_info);
             let pd_i = self.get_page_directory_index(mb_info.mem_block_index);
             let pt_i = self.get_page_table_index(mb_info.mem_block_index);
             let mut pte = self.get_page_table_entry(pd_i, pt_i);
@@ -359,8 +350,8 @@ impl Paging
             return;
         }
 
-        self.phys_mem_manager.dealloc_single_mem_block(mem_block);
-        self.phys_mem_manager.clear_mem_block(mem_block);
+        PHYS_MEM_MANAGER.lock().dealloc_single_mem_block(mem_block);
+        PHYS_MEM_MANAGER.lock().clear_mem_block(mem_block);
         let pd_i = self.get_page_directory_index(mem_block.mem_block_index);
         let pt_i = self.get_page_table_index(mem_block.mem_block_index);
         let mut pte = self.get_page_table_entry(pd_i, pt_i);
@@ -369,12 +360,12 @@ impl Paging
 
     pub fn get_total_mem_size(&self) -> u32
     {
-        return self.phys_mem_manager.get_total_mem_size();
+        return PHYS_MEM_MANAGER.lock().get_total_mem_size();
     }
 
     pub fn get_used_mem_size(&self) -> u32
     {
-        return self.phys_mem_manager.get_allocated_blocks() * MEM_BLOCK_SIZE;
+        return PHYS_MEM_MANAGER.lock().get_allocated_blocks() * MEM_BLOCK_SIZE;
     }
 
     pub fn get_free_mem_size(&self) -> u32

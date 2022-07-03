@@ -25,7 +25,7 @@ GRUBを使ったrust製自作OS
 - Device support
   - [x] PS/2 Keyboard (Only ANSI US 104 Keyboard)
   - [x] PS/2 Mouse
-  - [ ] Serial: UART 16650
+  - [x] Serial: UART 16650
   - [ ] PCI connection
     - [ ] SATA drive support (AHCI)
   - [ ] USB connection

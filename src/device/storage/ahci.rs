@@ -1,6 +1,4 @@
-use core::ptr::{read_volatile, write_volatile};
-
-use crate::{util::logger::{log_warn, log_debug}, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::PAGING};
+use crate::{util::logger::{log_warn, log_debug}, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::PHYS_MEM_MANAGER};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -181,14 +179,14 @@ impl Ahci
         self.lock_port_cmd(port_num);
 
         // setup command list memory area
-        if let Some(mb_info) = PAGING.lock().alloc_single_page()
+        if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
         {
             port_ctrl_reg.cmd_list_base_addr_low = mb_info.mem_block_start_addr;
             port_ctrl_reg.cmd_list_base_addr_high = 0;
         }
 
         // setup FIS struct memory area
-        if let Some(mb_info) = PAGING.lock().alloc_single_page()
+        if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
         {
             port_ctrl_reg.fis_base_addr_low = mb_info.mem_block_start_addr;
             port_ctrl_reg.fis_base_addr_high = 0;
