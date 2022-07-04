@@ -79,6 +79,7 @@ tasks:
     debug:
         deps: [build]
         cmds:
+            - task makehdd
             - "{{$.QEMU}} -s -S"
 
     gdb:

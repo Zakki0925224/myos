@@ -1,3 +1,5 @@
+use core::ptr::{read_volatile, write_volatile};
+
 use crate::{handler, util::logger::*};
 
 use super::asm;
@@ -76,21 +78,21 @@ pub fn init()
     // init GDT
     for i in 0..=(GDT_LIMIT / 8)
     {
-        let gdt = unsafe { &mut *((GDT_ADDR + i * 8) as *mut SegmentDescriptor) };
-        *gdt = SegmentDescriptor::new(0, 0, 0);
+        let gdt = SegmentDescriptor::new(0, 0, 0);
+        write_gdt(i, gdt);
     }
 
     // null descriptor
-    let gdt = unsafe { &mut *((GDT_ADDR + 0 * 8) as *mut SegmentDescriptor) };
-    *gdt = SegmentDescriptor::new(0, 0, 0);
+    let gdt = SegmentDescriptor::new(0, 0, 0);
+    write_gdt(0, gdt);
 
     // code descriptor
-    let gdt = unsafe { &mut *((GDT_ADDR + 1 * 8) as *mut SegmentDescriptor) };
-    *gdt = SegmentDescriptor::new(0xffff, 0, 0xcf9a);
+    let gdt = SegmentDescriptor::new(0xffff, 0, 0xcf9a);
+    write_gdt(1, gdt);
 
     // data descriptor
-    let gdt = unsafe { &mut *((GDT_ADDR + 2 * 8) as *mut SegmentDescriptor) };
-    *gdt = SegmentDescriptor::new(0xffff, 0, 0xcf92);
+    let gdt = SegmentDescriptor::new(0xffff, 0, 0xcf92);
+    write_gdt(2, gdt);
 
     // temp descriptor
     // task code descriptor
@@ -103,41 +105,75 @@ pub fn init()
     // init IDT
     for i in 0..=(IDT_LIMIT / 8)
     {
-        let idt = unsafe { &mut *((IDT_ADDR + i * 8) as *mut GateDescriptor) };
-        *idt = GateDescriptor::new(0, 0, 0);
+        let idt = GateDescriptor::new(0, 0, 0);
+        write_idt(i, idt);
     }
 
     // set interrupts
     // PS/2 keyboard
-    let idt = unsafe { &mut *((IDT_ADDR + INT_VECTOR_IRQ1 * 8) as *mut GateDescriptor) };
-    *idt = GateDescriptor::new(handler!(keyboard_int) as u32, IDT_INT_SELECTOR, INTGATE);
+    let idt = GateDescriptor::new(handler!(keyboard_int) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(INT_VECTOR_IRQ1, idt);
 
     // PS/2 mouse
-    let idt = unsafe { &mut *((IDT_ADDR + INT_VECTOR_IRQ12 * 8) as *mut GateDescriptor) };
-    *idt = GateDescriptor::new(handler!(mouse_int) as u32, IDT_INT_SELECTOR, INTGATE);
+    let idt = GateDescriptor::new(handler!(mouse_int) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(INT_VECTOR_IRQ12, idt);
 
     asm::load_idtr(IDT_LIMIT, IDT_ADDR);
     log_info("IDT initialized");
 }
 
-pub fn get_gdt(index: i32) -> SegmentDescriptor
+fn read_gdt(index: i32) -> Option<SegmentDescriptor>
 {
-    if (index < 0) || (index > (GDT_LIMIT / 8))
+    if index > (GDT_LIMIT / 8)
     {
-        panic!("GDT index out of range");
+        return None;
     }
 
-    let gdt = unsafe { &mut *((GDT_ADDR + index * 8) as *mut SegmentDescriptor) };
-    return *gdt;
+    unsafe
+    {
+        let buffer = (GDT_ADDR + index * 8) as *const SegmentDescriptor;
+        return Some(read_volatile(buffer));
+    }
 }
 
-pub fn get_idt(index: i32) -> GateDescriptor
+fn write_gdt(index: i32, gdt: SegmentDescriptor)
 {
-    if (index < 0) || (index > (IDT_LIMIT / 8))
+    if index > (GDT_LIMIT / 8)
     {
-        panic!("IDT index out of range");
+        return;
     }
 
-    let idt = unsafe { &mut *((IDT_ADDR + index * 8) as *mut GateDescriptor) };
-    return *idt;
+    unsafe
+    {
+        let buffer = (GDT_ADDR + index * 8) as *mut SegmentDescriptor;
+        write_volatile(buffer, gdt);
+    }
+}
+
+fn read_idt(index: i32) -> Option<GateDescriptor>
+{
+    if index > (IDT_LIMIT / 8)
+    {
+        return None;
+    }
+
+    unsafe
+    {
+        let buffer = (IDT_ADDR + index * 8) as *const GateDescriptor;
+        return Some(read_volatile(buffer));
+    }
+}
+
+fn write_idt(index: i32, idt: GateDescriptor)
+{
+    if index > (IDT_LIMIT / 8)
+    {
+        return;
+    }
+
+    unsafe
+    {
+        let buffer = (IDT_ADDR + index * 8) as *mut GateDescriptor;
+        write_volatile(buffer, idt);
+    }
 }

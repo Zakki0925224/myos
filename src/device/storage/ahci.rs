@@ -1,6 +1,6 @@
-use multiboot2::ElfSection;
+use core::ptr::{read_volatile, write_volatile};
 
-use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}};
+use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}, arch::asm};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -88,10 +88,34 @@ impl Ahci
         self.is_init = true;
     }
 
-    pub fn get_hba_mem_regs(&self) -> &mut HostBusAdapterMemoryRegisters
+    fn read_hba_mem_regs(&self) -> HostBusAdapterMemoryRegisters
     {
-        let hba = unsafe { &mut *(self.hba_base_addr as *mut HostBusAdapterMemoryRegisters) };
-        return hba;
+        unsafe
+        {
+            let buffer = self.hba_base_addr as *const HostBusAdapterMemoryRegisters;
+            return read_volatile(buffer);
+        }
+    }
+
+    fn write_hba_mem_regs(&self, hba_mem_regs: HostBusAdapterMemoryRegisters)
+    {
+        unsafe
+        {
+            let buffer = self.hba_base_addr as *mut HostBusAdapterMemoryRegisters;
+            write_volatile(buffer, hba_mem_regs);
+        }
+    }
+
+    fn read_port_ctrl_regs(&self, port_num: usize) -> PortControlRegisters
+    {
+        return self.read_hba_mem_regs().port_ctrl_regs[port_num];
+    }
+
+    fn write_port_ctrl_regs(&self, port_num: usize, port_ctrl_regs: PortControlRegisters)
+    {
+        let mut hba_mem_regs = self.read_hba_mem_regs();
+        hba_mem_regs.port_ctrl_regs[port_num] = port_ctrl_regs;
+        self.write_hba_mem_regs(hba_mem_regs);
     }
 
     pub fn get_port_type(&self, port_num: usize) -> Option<PortType>
@@ -101,8 +125,8 @@ impl Ahci
             return None;
         }
 
-        let status = self.get_hba_mem_regs().port_ctrl_regs[port_num].sata_status;
-        let sig = self.get_hba_mem_regs().port_ctrl_regs[port_num].sig;
+        let status = self.read_port_ctrl_regs(port_num).sata_status;
+        let sig = self.read_port_ctrl_regs(port_num).sig;
         let ipm = ((status >> 8) & 0xf) as u8;
         let det = (status & 0xf) as u8;
 
@@ -181,7 +205,7 @@ impl Ahci
             return None;
         }
 
-        return Some(((self.get_hba_mem_regs().port_impl >> port_num) & 0x1) != 0);
+        return Some(((self.read_hba_mem_regs().port_impl >> port_num) & 0x1) != 0);
     }
 
     fn init_port_mem_space(&self, port_num: usize)
@@ -191,8 +215,8 @@ impl Ahci
             return;
         }
 
-        let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
         self.lock_port_cmd(port_num);
+        let mut port_ctrl_reg = self.read_port_ctrl_regs(port_num);
 
         // setup command list memory area
         let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
@@ -254,6 +278,7 @@ impl Ahci
             println!("Failed to initialize port{} memory space", port_num);
         }
 
+        self.write_port_ctrl_regs(port_num, port_ctrl_reg);
         self.unlock_port_cmd(port_num);
 
         println!("Port{} memory space initialized", port_num);
@@ -266,19 +291,21 @@ impl Ahci
             return;
         }
 
-        let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num);
 
         // clear ST (bit0)
-        port_ctrl_reg.cmd &= !PORT_CMD_ST_MASK;
+        port_ctrl_regs.cmd &= !PORT_CMD_ST_MASK;
         // clear FRE (bit4)
-        port_ctrl_reg.cmd &= !PORT_CMD_FRE_MASK;
+        port_ctrl_regs.cmd &= !PORT_CMD_FRE_MASK;
+        self.write_port_ctrl_regs(port_num, port_ctrl_regs);
 
         //wait until FR (bit 14) and CR (bit15) are cleared
+        //asm::test();
         loop
         {
-            println!("waiting...");
-            if (port_ctrl_reg.cmd & PORT_CMD_FR_MASK) == 0 &&
-               (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) == 0
+            let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+            if (port_ctrl_regs.cmd & PORT_CMD_FR_MASK) == 0 &&
+               (port_ctrl_regs.cmd & PORT_CMD_CR_MASK) == 0
             {
                 break;
             }
@@ -292,15 +319,25 @@ impl Ahci
             return;
         }
 
-        let port_ctrl_reg = &mut self.get_hba_mem_regs().port_ctrl_regs[port_num];
-
         // wait until CR (bit15) is cleared
-        while (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) != 0 {};
+        //while (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) != 0 {};
+        loop
+        {
+            let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
 
+            if (port_ctrl_regs.cmd & PORT_CMD_CR_MASK) == 0
+            {
+                break;
+            }
+        }
+
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num);
         // set FRE (bit4)
-        port_ctrl_reg.cmd |= PORT_CMD_FRE_MASK;
+        port_ctrl_regs.cmd |= PORT_CMD_FRE_MASK;
         // set ST (bit0)
-        port_ctrl_reg.cmd |= PORT_CMD_ST_MASK;
+        port_ctrl_regs.cmd |= PORT_CMD_ST_MASK;
+
+        self.write_port_ctrl_regs(port_num, port_ctrl_regs);
     }
 
     pub fn is_init(&self) -> bool
@@ -310,6 +347,7 @@ impl Ahci
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[repr(C)]
 pub struct HostBusAdapterMemoryRegisters
 {
     // 0x0 - 0x2b generic host control
@@ -331,6 +369,7 @@ pub struct HostBusAdapterMemoryRegisters
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[repr(C)]
 pub struct PortControlRegisters
 {
     pub cmd_list_base_addr_low: u32,
@@ -355,6 +394,7 @@ pub struct PortControlRegisters
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[repr(C)]
 pub struct CommandHeader
 {
     dw0: u32,
