@@ -885,6 +885,7 @@ impl PciDevice
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[repr(C)]
 struct PciConfigSpace
 {
     pub raw_data: [u32; 16]
