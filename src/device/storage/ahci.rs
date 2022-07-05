@@ -1,6 +1,8 @@
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}, arch::asm};
+use modular_bitfield::{bitfield, prelude::*};
+
+use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -19,6 +21,9 @@ const PORT_CMD_ST_MASK: u32 = 0x1;
 const PORT_CMD_FRE_MASK: u32 = 0x10;
 const PORT_CMD_FR_MASK: u32 = 0x4000;
 const PORT_CMD_CR_MASK: u32 = 0x8000;
+
+const FIS_H2D_REGS_SIZE: u8 = 20;
+const FIS_D2H_REGS_SIZE: u8 = 20;
 
 #[derive(Debug, PartialEq)]
 enum PortType
@@ -118,6 +123,28 @@ impl Ahci
         self.write_hba_mem_regs(hba_mem_regs);
     }
 
+    fn read_cmd_header(&self, port_num: usize, header_index: usize) -> CommandHeader
+    {
+        let addr = self.read_port_ctrl_regs(port_num).cmd_list_base_addr_low + header_index as u32;
+
+        unsafe
+        {
+            let buffer = addr as *const CommandHeader;
+            return read_volatile(buffer);
+        }
+    }
+
+    fn write_cmd_header(&self, port_num: usize, header_index: usize, cmd_header: CommandHeader)
+    {
+        let addr = self.read_port_ctrl_regs(port_num).cmd_list_base_addr_low + header_index as u32;
+
+        unsafe
+        {
+            let buffer = addr as *mut CommandHeader;
+            write_volatile(buffer, cmd_header);
+        }
+    }
+
     pub fn get_port_type(&self, port_num: usize) -> Option<PortType>
     {
         if port_num > MAX_PORT_COUNT - 1
@@ -172,6 +199,54 @@ impl Ahci
         }
 
         return cnt;
+    }
+
+    pub fn read(&self, port_num: usize, cnt: u32)
+    {
+        if port_num > MAX_PORT_COUNT - 1
+        {
+            return;
+        }
+
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+        port_ctrl_regs.int_status = 0xfff1; // clear bits
+
+        let mut spin_lock_timeout_cnt = 0;
+        let slot = self.find_cmd_slot(port_num);
+
+        if let None = slot
+        {
+            return;
+        }
+
+        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap() as usize);
+        cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
+        cmd_header.set_write(0);
+        cmd_header.set_phys_region_desc_table_len(((cnt - 1) >> 4) + 1);
+    }
+
+    fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
+    {
+        if port_num > MAX_PORT_COUNT - 1
+        {
+            return None;
+        }
+
+        let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+        let mut slots = port_ctrl_regs.sata_active | port_ctrl_regs.cmd_issue;
+
+        for i in 0..32
+        {
+            if (slots & 1) == 0
+            {
+                return Some(i);
+            }
+
+            slots >>= 1;
+        }
+
+        log_warn("Cannot find free command list entry");
+        return None;
     }
 
     pub fn ahci_info(&self)
@@ -245,9 +320,8 @@ impl Ahci
             //set command headers
             for i in 0..32
             {
-                let addr = port_ctrl_reg.cmd_list_base_addr_low + i as u32;
-                let cmd_header = unsafe { &mut *(addr as *mut CommandHeader) };
-                cmd_header.set_prdtl(8); // 8 ptrd entry per command table
+                let mut cmd_header = self.read_cmd_header(port_num, i);
+                cmd_header.set_phys_region_desc_table_len(8); // 8 ptrd entry per command table
 
                 let mut cmd_table_base_addr = mem_areas[i / 2].mem_block_start_addr;
 
@@ -256,8 +330,10 @@ impl Ahci
                     cmd_table_base_addr += MEM_BLOCK_SIZE / 2;
                 }
 
-                cmd_header.set_cmd_table_base_addr_low(cmd_table_base_addr);
-                cmd_header.set_cmd_table_base_addr_high(0);
+                cmd_header.set_cmd_table_desc_base_addr_low(cmd_table_base_addr);
+                cmd_header.set_cmd_table_desc_base_addr_high(0);
+
+                self.write_cmd_header(port_num, i, cmd_header);
             }
         }
         else
@@ -300,7 +376,6 @@ impl Ahci
         self.write_port_ctrl_regs(port_num, port_ctrl_regs);
 
         //wait until FR (bit 14) and CR (bit15) are cleared
-        //asm::test();
         loop
         {
             let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
@@ -346,7 +421,7 @@ impl Ahci
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct HostBusAdapterMemoryRegisters
 {
@@ -368,7 +443,7 @@ pub struct HostBusAdapterMemoryRegisters
     pub port_ctrl_regs: [PortControlRegisters; MAX_PORT_COUNT]
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PortControlRegisters
 {
@@ -393,46 +468,92 @@ pub struct PortControlRegisters
     pub vendor_spec: [u32; 4]
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
+#[bitfield]
 #[repr(C)]
 pub struct CommandHeader
 {
-    dw0: u32,
-    dw1: u32,
-    dw2: u32,
-    dw3: u32,
-    reserved: [u32; 4]
+    pub cmd_fis_len: B5,                        // command FIS length
+    pub atapi: B1,                              // ATAPI
+    pub write: B1,                              // write - 1: host to drive, 0: drive to host
+    pub prefet: B1,                             // prefetchable
+
+    pub reset: B1,                              // reset
+    pub bist: B1,
+    pub clear: B1,                              // clear busy upon R_OK
+    reserved0: B1,
+    pub port_multi_port: B4,
+
+    pub phys_region_desc_table_len: u16,        // physical region descriptor table length
+
+    pub phys_region_desc_byte_cnt: u32,         // physical region descriptor byte count transferred
+
+    pub cmd_table_desc_base_addr_low: u32,      // command table descriptor base address
+    pub cmd_table_desc_base_addr_high: u32,
+    reserved1: u32,
+    reserved2: u32,
+    reserved3: u32,
+    reserved4: u32
 }
 
-impl CommandHeader
+#[derive(Copy, Clone)]
+#[bitfield]
+#[repr(C)]
+pub struct FISHostToDeviceRegisters
 {
-    pub fn get_prdtl(&self) -> u16
-    {
-        return (self.dw0 >> 16) as u16;
-    }
+    // dw0
+    pub fis_type: u8,
+    pub port_multi: B4,
+    reserved0: B3,
+    pub c: B1,
+    pub cmd: u8,
+    pub feature_reg_low: u8,
+    // dw1
+    pub lba0: u8,
+    pub lba1: u8,
+    pub lba2: u8,
+    pub device: u8,
+    // dw2
+    pub lba3: u8,
+    pub lba4: u8,
+    pub lba5: u8,
+    pub feature_reg_high: u8,
+    // dw3
+    pub cnt_reg_low: u8,
+    pub cnt_reg_high: u8,
+    pub icc: u8,
+    pub ctrl_reg: u8,
+    // dw4
+    reserved1: u32
+}
 
-    pub fn set_prdtl(&mut self, prdtl: u16)
-    {
-        self.dw0 |= (prdtl as u32) << 16;
-    }
-
-    pub fn get_cmd_table_base_addr_low(&self) -> u32
-    {
-        return self.dw2;
-    }
-
-    pub fn set_cmd_table_base_addr_low(&mut self, base_addr: u32)
-    {
-        self.dw2 = base_addr;
-    }
-
-    pub fn get_cmd_table_base_addr_high(&self) -> u32
-    {
-        return self.dw3;
-    }
-
-    pub fn set_cmd_table_base_addr_high(&mut self, base_addr: u32)
-    {
-        self.dw3 = base_addr;
-    }
+#[derive(Copy, Clone)]
+#[bitfield]
+#[repr(C)]
+pub struct FISDeviceToHostRegisters
+{
+    // dw0
+    pub fis_type: u8,
+    pub port_multi: B4,
+    reserved0: B2,
+    pub int: B1, // interrupt bit
+    reserved1: B1,
+    pub status: u8,
+    pub error: u8,
+    // dw1
+    pub lba0: u8,
+    pub lba1: u8,
+    pub lba2: u8,
+    pub device: u8,
+    // dw2
+    pub lba3: u8,
+    pub lba4: u8,
+    pub lba5: u8,
+    reserved2: u8,
+    // dw3
+    pub cnt_reg_low: u8,
+    pub cnt_reg_high: u8,
+    reserved3: u16,
+    // dw4
+    reserved4: u32
 }
