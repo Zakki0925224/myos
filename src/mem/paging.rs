@@ -38,14 +38,14 @@ const PTE_FLAGS_P: u32 = 0x1;
 #[derive(Debug, PartialEq, Eq)]
 pub struct PageTableEntry
 {
-    entry: *mut u32
+    base_addr: u32
 }
 
 impl PageTableEntry
 {
-    pub fn new(entry: *mut u32) -> PageTableEntry
+    pub fn new(base_addr: u32) -> PageTableEntry
     {
-        return PageTableEntry { entry };
+        return PageTableEntry { base_addr };
     }
 
     pub fn set(&mut self, mut page_frame_addr: u32, flags: u32)
@@ -118,26 +118,34 @@ impl PageTableEntry
 
     fn get_inner(&self) -> u32
     {
-        return unsafe { read_volatile(self.entry) };
+        unsafe
+        {
+            let ptr = self.base_addr as *const u32;
+            return read_volatile(ptr);
+        }
     }
 
     fn set_inner(&self, inner: u32)
     {
-        unsafe { write_volatile(self.entry, inner) };
+        unsafe
+        {
+            let ptr = self.base_addr as *mut u32;
+            write_volatile(ptr, inner);
+        }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct PageDirectoryEntry
 {
-    entry: *mut u32
+    base_addr: u32
 }
 
 impl PageDirectoryEntry
 {
-    pub fn new(entry: *mut u32) -> PageDirectoryEntry
+    pub fn new(base_addr: u32) -> PageDirectoryEntry
     {
-        return PageDirectoryEntry { entry };
+        return PageDirectoryEntry { base_addr };
     }
 
     pub fn set(&mut self, mut page_table_addr: u32, flags: u32)
@@ -210,12 +218,20 @@ impl PageDirectoryEntry
 
     fn get_inner(&self) -> u32
     {
-        return unsafe { read_volatile(self.entry) };
+        unsafe
+        {
+            let ptr = self.base_addr as *const u32;
+            return read_volatile(ptr);
+        }
     }
 
     fn set_inner(&self, inner: u32)
     {
-        unsafe { write_volatile(self.entry, inner) };
+        unsafe
+        {
+            let ptr = self.base_addr as *mut u32;
+            write_volatile(ptr, inner);
+        }
     }
 }
 
@@ -375,16 +391,14 @@ impl Paging
 
     fn get_page_directory_entry(&self, index: usize) -> PageDirectoryEntry
     {
-        let phys = unsafe { &mut *((self.pd_block.mem_block_start_addr + index as u32 * 4) as *mut u32) };
-        return PageDirectoryEntry::new(phys);
+        return PageDirectoryEntry::new(self.pd_block.mem_block_start_addr + index as u32 * 4);
     }
 
     fn get_page_table_entry(&self, page_directory_index: usize, page_table_index: usize) -> PageTableEntry
     {
         let pde = self.get_page_directory_entry(page_directory_index);
         let pt_addr = pde.get_page_table_addr();
-        let phys = unsafe { &mut *((pt_addr + page_table_index as u32 * 4) as *mut u32) };
-        return PageTableEntry::new(phys);
+        return PageTableEntry::new(pt_addr + page_table_index as u32 * 4);
     }
 
     fn get_page_directory_index(&self, mem_block_index: usize) -> usize

@@ -150,8 +150,8 @@ impl VgaScreen
     {
         unsafe
         {
-            let buffer = VGA_MEM as *mut u8;
-            write_volatile(buffer.offset(offset), data);
+            let ptr = VGA_MEM as *mut u8;
+            write_volatile(ptr.offset(offset), data);
         }
     }
 
@@ -159,8 +159,8 @@ impl VgaScreen
     {
         unsafe
         {
-            let buffer = VGA_MEM as *mut u8;
-            return read_volatile(buffer.offset(offset));
+            let ptr = VGA_MEM as *const u8;
+            return read_volatile(ptr.offset(offset));
         }
     }
 
@@ -203,8 +203,8 @@ impl VgaScreen
     {
         for i in convert_curosr_pos_to_offset(1, 2)..=convert_curosr_pos_to_offset(VGA_WIDTH, VGA_HEIGHT) + 1
         {
-            let buffer = self.read_data(i as isize);
-            self.write_data(buffer, (i - VGA_WIDTH * 2) as isize);
+            let ptr = self.read_data(i as isize);
+            self.write_data(ptr, (i - VGA_WIDTH * 2) as isize);
         }
 
         for i in convert_curosr_pos_to_offset(1, VGA_HEIGHT)..=convert_curosr_pos_to_offset(VGA_WIDTH, VGA_HEIGHT) + 1

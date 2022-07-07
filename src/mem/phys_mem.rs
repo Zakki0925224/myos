@@ -164,9 +164,7 @@ impl PhysicalMemoryManager
                 break;
             }
 
-            let ptr = self.memmap_ptr(i).unwrap();
-
-            if unsafe { read_volatile(ptr) } == u32::MAX
+            if self.read_memmap(i as isize) == u32::MAX
             {
                 i += u32::BITS as usize;
                 continue;
@@ -229,23 +227,13 @@ impl PhysicalMemoryManager
 
     pub fn clear_mem_block(&self, mem_block: MemoryBlockInfo)
     {
-        // set 0 from memory block start address to end address
-        let mut i = mem_block.mem_block_start_addr;
-
-        loop
+        for i in mem_block.mem_block_start_addr..mem_block.mem_block_start_addr + mem_block.mem_block_size
         {
-            if i >= mem_block.mem_block_start_addr + mem_block.mem_block_size
-            {
-                break;
-            }
-
             unsafe
             {
-                let ptr = &mut *((i) as *mut u8);
+                let ptr = i as *mut u8;
                 write_volatile(ptr, 0);
             }
-
-            i += 1;
         }
     }
 
@@ -296,34 +284,41 @@ impl PhysicalMemoryManager
 
     fn allocate_mem_block(&mut self, mem_block_index: usize)
     {
-        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize).unwrap();
-        let mut tmp = unsafe { read_volatile(buffer) };
-        tmp |= 1 << (mem_block_index % u32::BITS as usize);
-        unsafe { write_volatile(buffer, tmp); }
+        let offset = (mem_block_index / u32::BITS as usize) as isize;
+        let mut map = self.read_memmap(offset);
+        map |= 1 << (mem_block_index % u32::BITS as usize);
+        self.write_memmap(offset, map);
     }
 
-    fn deallocate_mem_block(&mut self, mem_block_index: usize)
+    fn deallocate_mem_block(&self, mem_block_index: usize)
     {
-        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize).unwrap();
-        let mut tmp = unsafe { read_volatile(buffer) };
-        tmp &= !(1 << (mem_block_index % u32::BITS as usize));
-        unsafe { write_volatile(buffer, tmp); }
+        let offset = (mem_block_index / u32::BITS as usize) as isize;
+        let mut map = self.read_memmap(offset);
+        map &= !(1 << (mem_block_index % u32::BITS as usize));
+        self.write_memmap(offset, map);
     }
 
-    fn is_allocated_mem_block(&mut self, mem_block_index: usize) -> bool
+    fn is_allocated_mem_block(&self, mem_block_index: usize) -> bool
     {
-        let buffer = self.memmap_ptr(mem_block_index / u32::BITS as usize as usize).unwrap();
-        let tmp = unsafe { read_volatile(buffer) };
+        let tmp = self.read_memmap((mem_block_index / u32::BITS as usize) as isize);
         return tmp & (1 << (mem_block_index % u32::BITS as usize)) > 0;
     }
 
-    fn memmap_ptr(&mut self, offset: usize) -> Option<&mut u32>
+    fn read_memmap(&self, offset: isize) -> u32
     {
-        if offset > self.memmap_size as usize
+        unsafe
         {
-            return None;
+            let ptr = self.memmap_addr as *const u32;
+            return read_volatile(ptr.offset(offset));
         }
+    }
 
-        return Some(unsafe { &mut *((self.memmap_addr as *mut u32)).offset(offset as isize) });
+    fn write_memmap(&self, offset: isize, map: u32)
+    {
+        unsafe
+        {
+            let ptr = self.memmap_addr as *mut u32;
+            write_volatile(ptr.offset(offset), map);
+        }
     }
 }

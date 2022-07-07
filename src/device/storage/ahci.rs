@@ -81,7 +81,7 @@ impl Ahci
         }
 
         // init port memory space
-        for i in 0..32
+        for i in 0..MAX_PORT_COUNT
         {
             if self.get_port_type(i) != None &&
                self.is_impl_port(i) != None
@@ -97,8 +97,8 @@ impl Ahci
     {
         unsafe
         {
-            let buffer = self.hba_base_addr as *const HostBusAdapterMemoryRegisters;
-            return read_volatile(buffer);
+            let ptr = self.hba_base_addr as *const HostBusAdapterMemoryRegisters;
+            return read_volatile(ptr);
         }
     }
 
@@ -106,8 +106,8 @@ impl Ahci
     {
         unsafe
         {
-            let buffer = self.hba_base_addr as *mut HostBusAdapterMemoryRegisters;
-            write_volatile(buffer, hba_mem_regs);
+            let ptr = self.hba_base_addr as *mut HostBusAdapterMemoryRegisters;
+            write_volatile(ptr, hba_mem_regs);
         }
     }
 
@@ -129,8 +129,8 @@ impl Ahci
 
         unsafe
         {
-            let buffer = addr as *const CommandHeader;
-            return read_volatile(buffer);
+            let ptr = addr as *const CommandHeader;
+            return read_volatile(ptr);
         }
     }
 
@@ -140,14 +140,14 @@ impl Ahci
 
         unsafe
         {
-            let buffer = addr as *mut CommandHeader;
-            write_volatile(buffer, cmd_header);
+            let ptr = addr as *mut CommandHeader;
+            write_volatile(ptr, cmd_header);
         }
     }
 
     pub fn get_port_type(&self, port_num: usize) -> Option<PortType>
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return None;
         }
@@ -201,33 +201,33 @@ impl Ahci
         return cnt;
     }
 
+    // TODO
     pub fn read(&self, port_num: usize, cnt: u32)
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return;
         }
 
-        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num);
-        port_ctrl_regs.int_status = 0xfff1; // clear bits
+        let mut pcr = self.read_port_ctrl_regs(port_num);
+        let a = pcr.sata_active + 114514;
+        println!("{}", pcr.sata_active);
+        println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
+        pcr.sata_active = a;
+        self.write_port_ctrl_regs(port_num, pcr);
+        println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
 
-        let mut spin_lock_timeout_cnt = 0;
-        let slot = self.find_cmd_slot(port_num);
-
-        if let None = slot
-        {
-            return;
-        }
-
-        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap() as usize);
-        cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
-        cmd_header.set_write(0);
-        cmd_header.set_phys_region_desc_table_len(((cnt - 1) >> 4) + 1);
+        // let mut pcr = self.read_port_ctrl_regs(port_num);
+        // pcr.cmd = 100;
+        // self.write_port_ctrl_regs(port_num, pcr);
+        // println!("{}", self.read_port_ctrl_regs(port_num).cmd);
+        //self.write_port_ctrl_regs(port_num, *pcr);
+        //println!("{:?}", &self.read_port_ctrl_regs(port_num).sata_active);
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return None;
         }
@@ -235,7 +235,7 @@ impl Ahci
         let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
         let mut slots = port_ctrl_regs.sata_active | port_ctrl_regs.cmd_issue;
 
-        for i in 0..32
+        for i in 0..MAX_PORT_COUNT as u32
         {
             if (slots & 1) == 0
             {
@@ -275,7 +275,7 @@ impl Ahci
 
     fn is_impl_port(&self, port_num: usize) -> Option<bool>
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return None;
         }
@@ -285,7 +285,7 @@ impl Ahci
 
     fn init_port_mem_space(&self, port_num: usize)
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return;
         }
@@ -318,7 +318,7 @@ impl Ahci
             }
 
             //set command headers
-            for i in 0..32
+            for i in 0..MAX_PORT_COUNT
             {
                 let mut cmd_header = self.read_cmd_header(port_num, i);
                 cmd_header.set_phys_region_desc_table_len(8); // 8 ptrd entry per command table
@@ -362,7 +362,7 @@ impl Ahci
 
     fn lock_port_cmd(&self, port_num: usize)
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return;
         }
@@ -389,13 +389,12 @@ impl Ahci
 
     fn unlock_port_cmd(&self, port_num: usize)
     {
-        if port_num > MAX_PORT_COUNT - 1
+        if !self.is_available_port_num(port_num)
         {
             return;
         }
 
         // wait until CR (bit15) is cleared
-        //while (port_ctrl_reg.cmd & PORT_CMD_CR_MASK) != 0 {};
         loop
         {
             let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
@@ -415,13 +414,18 @@ impl Ahci
         self.write_port_ctrl_regs(port_num, port_ctrl_regs);
     }
 
+    fn is_available_port_num(&self, port_num: usize) -> bool
+    {
+        return port_num < MAX_PORT_COUNT;
+    }
+
     pub fn is_init(&self) -> bool
     {
         return self.is_init;
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct HostBusAdapterMemoryRegisters
 {
@@ -443,7 +447,7 @@ pub struct HostBusAdapterMemoryRegisters
     pub port_ctrl_regs: [PortControlRegisters; MAX_PORT_COUNT]
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct PortControlRegisters
 {
@@ -468,8 +472,8 @@ pub struct PortControlRegisters
     pub vendor_spec: [u32; 4]
 }
 
-#[derive(Copy, Clone)]
 #[bitfield]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct CommandHeader
 {
@@ -484,76 +488,76 @@ pub struct CommandHeader
     reserved0: B1,
     pub port_multi_port: B4,
 
-    pub phys_region_desc_table_len: u16,        // physical region descriptor table length
+    pub phys_region_desc_table_len: B16,        // physical region descriptor table length
 
-    pub phys_region_desc_byte_cnt: u32,         // physical region descriptor byte count transferred
+    pub phys_region_desc_byte_cnt: B32,         // physical region descriptor byte count transferred
 
-    pub cmd_table_desc_base_addr_low: u32,      // command table descriptor base address
-    pub cmd_table_desc_base_addr_high: u32,
-    reserved1: u32,
-    reserved2: u32,
-    reserved3: u32,
-    reserved4: u32
+    pub cmd_table_desc_base_addr_low: B32,      // command table descriptor base address
+    pub cmd_table_desc_base_addr_high: B32,
+    reserved1: B32,
+    reserved2: B32,
+    reserved3: B32,
+    reserved4: B32
 }
 
-#[derive(Copy, Clone)]
 #[bitfield]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct FISHostToDeviceRegisters
 {
     // dw0
-    pub fis_type: u8,
+    pub fis_type: B8,
     pub port_multi: B4,
     reserved0: B3,
     pub c: B1,
-    pub cmd: u8,
-    pub feature_reg_low: u8,
+    pub cmd: B8,
+    pub feature_reg_low: B8,
     // dw1
-    pub lba0: u8,
-    pub lba1: u8,
-    pub lba2: u8,
-    pub device: u8,
+    pub lba0: B8,
+    pub lba1: B8,
+    pub lba2: B8,
+    pub device: B8,
     // dw2
-    pub lba3: u8,
-    pub lba4: u8,
-    pub lba5: u8,
-    pub feature_reg_high: u8,
+    pub lba3: B8,
+    pub lba4: B8,
+    pub lba5: B8,
+    pub feature_reg_high: B8,
     // dw3
-    pub cnt_reg_low: u8,
-    pub cnt_reg_high: u8,
-    pub icc: u8,
-    pub ctrl_reg: u8,
+    pub cnt_reg_low: B8,
+    pub cnt_reg_high: B8,
+    pub icc: B8,
+    pub ctrl_reg: B8,
     // dw4
-    reserved1: u32
+    reserved1: B32
 }
 
-#[derive(Copy, Clone)]
 #[bitfield]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct FISDeviceToHostRegisters
 {
     // dw0
-    pub fis_type: u8,
+    pub fis_type: B8,
     pub port_multi: B4,
     reserved0: B2,
     pub int: B1, // interrupt bit
     reserved1: B1,
-    pub status: u8,
-    pub error: u8,
+    pub status: B8,
+    pub error: B8,
     // dw1
-    pub lba0: u8,
-    pub lba1: u8,
-    pub lba2: u8,
-    pub device: u8,
+    pub lba0: B8,
+    pub lba1: B8,
+    pub lba2: B8,
+    pub device: B8,
     // dw2
-    pub lba3: u8,
-    pub lba4: u8,
-    pub lba5: u8,
-    reserved2: u8,
+    pub lba3: B8,
+    pub lba4: B8,
+    pub lba5: B8,
+    reserved2: B8,
     // dw3
-    pub cnt_reg_low: u8,
-    pub cnt_reg_high: u8,
-    reserved3: u16,
+    pub cnt_reg_low: B8,
+    pub cnt_reg_high: B8,
+    reserved3: B16,
     // dw4
-    reserved4: u32
+    reserved4: B32
 }

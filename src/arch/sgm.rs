@@ -131,8 +131,8 @@ fn read_gdt(index: i32) -> Option<SegmentDescriptor>
 
     unsafe
     {
-        let buffer = (GDT_ADDR + index * 8) as *const SegmentDescriptor;
-        return Some(read_volatile(buffer));
+        let ptr = (GDT_ADDR + index * 8) as *const SegmentDescriptor;
+        return Some(read_volatile(ptr));
     }
 }
 
@@ -145,8 +145,8 @@ fn write_gdt(index: i32, gdt: SegmentDescriptor)
 
     unsafe
     {
-        let buffer = (GDT_ADDR + index * 8) as *mut SegmentDescriptor;
-        write_volatile(buffer, gdt);
+        let ptr = (GDT_ADDR + index * 8) as *mut SegmentDescriptor;
+        write_volatile(ptr, gdt);
     }
 }
 
@@ -159,8 +159,8 @@ fn read_idt(index: i32) -> Option<GateDescriptor>
 
     unsafe
     {
-        let buffer = (IDT_ADDR + index * 8) as *const GateDescriptor;
-        return Some(read_volatile(buffer));
+        let ptr = (IDT_ADDR + index * 8) as *const GateDescriptor;
+        return Some(read_volatile(ptr));
     }
 }
 
@@ -173,7 +173,7 @@ fn write_idt(index: i32, idt: GateDescriptor)
 
     unsafe
     {
-        let buffer = (IDT_ADDR + index * 8) as *mut GateDescriptor;
-        write_volatile(buffer, idt);
+        let ptr = (IDT_ADDR + index * 8) as *mut GateDescriptor;
+        write_volatile(ptr, idt);
     }
 }
