@@ -31,8 +31,7 @@ pub fn sti()
 
 pub fn test()
 {
-    //unsafe { asm!("int 0x16"); }
-    //load_gdtr(0xdead, 0xbeaf);
+    //unsafe { asm!("int 0"); }
 }
 
 pub fn load_idtr(limit: i32, addr: i32)

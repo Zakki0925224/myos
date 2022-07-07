@@ -2,7 +2,7 @@ use core::ptr::{write_volatile, read_volatile};
 
 use multiboot2::BootInformation;
 
-use crate::{arch::asm, println};
+use crate::{arch::asm, println, util::logger::log_info};
 
 use super::{phys_mem::{PhysicalMemoryManager, MemoryBlockInfo, MEM_BLOCK_SIZE}, virt_mem::VirtualAddress, PHYS_MEM_MANAGER};
 
@@ -312,6 +312,7 @@ impl Paging
         }
 
         self.is_init = true;
+        log_info("Paging initialized");
     }
 
     pub fn enable(&mut self)

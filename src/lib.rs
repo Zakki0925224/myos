@@ -19,7 +19,7 @@ use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING};
 
 #[no_mangle]
 #[start]

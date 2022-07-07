@@ -4,13 +4,13 @@ use crate::{handler, util::logger::*};
 
 use super::asm;
 
-const GDT_ADDR: i32 = 0x00270000;
-const GDT_LIMIT: i32 = 0x0000ffff;
-const IDT_ADDR: i32 = 0x0026f800;
-const IDT_LIMIT: i32 = 0x000007ff;
-const IDT_INT_SELECTOR: i32 = 0x00000008;
+const GDT_ADDR: u32 = 0x270000;
+const GDT_LIMIT: u32 = 0xffff;
+const IDT_ADDR: u32 = 0x26f800;
+const IDT_LIMIT: u32 = 0x7ff;
+const IDT_INT_SELECTOR: u32 = 0x8;
 
-const INTGATE: i32 = 0x008e;
+const INTGATE: u8 = 0x8e;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -25,9 +25,9 @@ pub struct SegmentDescriptor
 
 impl SegmentDescriptor
 {
-    fn new(mut limit: u32, base: i32, mut flags: i32) -> SegmentDescriptor
+    fn new(mut limit: u32, base: u32, mut flags: u16) -> SegmentDescriptor
     {
-        if limit > 0xffff
+        if limit > 0xfffff
         {
             limit /= 0x1000;
             flags |= 0x8000;
@@ -57,14 +57,14 @@ pub struct GateDescriptor
 
 impl GateDescriptor
 {
-    fn new(base: u32, selector: i32, flags: i32) -> GateDescriptor
+    fn new(base: u32, selector: u32, flags: u8) -> GateDescriptor
     {
         return GateDescriptor
         {
             base_low: base as u16,
             selector: selector as u16,
             reserved: 0x0,
-            flags: flags as u8,
+            flags,
             base_high: (base >> 16) as u16
         }
     }
@@ -72,7 +72,8 @@ impl GateDescriptor
 
 pub fn init()
 {
-    use crate::int::{keyboard_int, mouse_int, INT_VECTOR_IRQ1, INT_VECTOR_IRQ12};
+    use crate::arch::int::*;
+    use crate::arch::ex_int::*;
     use core::arch::asm;
 
     // init GDT
@@ -99,7 +100,7 @@ pub fn init()
     // task data descriptor
     // ktss descriptor
 
-    asm::load_gdtr(GDT_LIMIT, GDT_ADDR);
+    asm::load_gdtr(GDT_LIMIT as i32, GDT_ADDR as i32);
     log_info("GDT initialized");
 
     // init IDT
@@ -108,6 +109,23 @@ pub fn init()
         let idt = GateDescriptor::new(0, 0, 0);
         write_idt(i, idt);
     }
+
+    // // set exceptions
+    // // divided by zero
+    // let idt = GateDescriptor::new(handler!(ex_divided_by_zero) as u32, IDT_INT_SELECTOR, INTGATE);
+    // write_idt(EX_INT_DIVIDED_BY_ZERO, idt);
+
+    // // double fault
+    // let idt = GateDescriptor::new(handler!(ex_double_fault) as u32, IDT_INT_SELECTOR, INTGATE);
+    // write_idt(EX_INT_DOUBLE_FAULT, idt);
+
+    // // general protection fault
+    // let idt = GateDescriptor::new(handler!(ex_general_protection_fault) as u32, IDT_INT_SELECTOR, INTGATE);
+    // write_idt(EX_INT_GENERAL_PROTECTION_FAULT, idt);
+
+    // // breakpoint
+    // let idt = GateDescriptor::new(handler!(ex_breakpoint) as u32, IDT_INT_SELECTOR, INTGATE);
+    // write_idt(EX_INT_BREAKPOINT, idt);
 
     // set interrupts
     // PS/2 keyboard
@@ -118,11 +136,20 @@ pub fn init()
     let idt = GateDescriptor::new(handler!(mouse_int) as u32, IDT_INT_SELECTOR, INTGATE);
     write_idt(INT_VECTOR_IRQ12, idt);
 
-    asm::load_idtr(IDT_LIMIT, IDT_ADDR);
+    asm::load_idtr(IDT_LIMIT as i32, IDT_ADDR as i32);
     log_info("IDT initialized");
 }
 
-fn read_gdt(index: i32) -> Option<SegmentDescriptor>
+pub fn enable_page_fault_handler()
+{
+    use crate::arch::ex_int::*;
+    use core::arch::asm;
+
+    let idt = GateDescriptor::new(handler!(ex_page_fault) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(EX_INT_PAGE_FAULT, idt);
+}
+
+fn read_gdt(index: u32) -> Option<SegmentDescriptor>
 {
     if index > (GDT_LIMIT / 8)
     {
@@ -136,7 +163,7 @@ fn read_gdt(index: i32) -> Option<SegmentDescriptor>
     }
 }
 
-fn write_gdt(index: i32, gdt: SegmentDescriptor)
+fn write_gdt(index: u32, gdt: SegmentDescriptor)
 {
     if index > (GDT_LIMIT / 8)
     {
@@ -150,7 +177,7 @@ fn write_gdt(index: i32, gdt: SegmentDescriptor)
     }
 }
 
-fn read_idt(index: i32) -> Option<GateDescriptor>
+fn read_idt(index: u32) -> Option<GateDescriptor>
 {
     if index > (IDT_LIMIT / 8)
     {
@@ -164,7 +191,7 @@ fn read_idt(index: i32) -> Option<GateDescriptor>
     }
 }
 
-fn write_idt(index: i32, idt: GateDescriptor)
+fn write_idt(index: u32, idt: GateDescriptor)
 {
     if index > (IDT_LIMIT / 8)
     {
