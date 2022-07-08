@@ -110,22 +110,22 @@ pub fn init()
         write_idt(i, idt);
     }
 
-    // // set exceptions
-    // // divided by zero
-    // let idt = GateDescriptor::new(handler!(ex_divided_by_zero) as u32, IDT_INT_SELECTOR, INTGATE);
-    // write_idt(EX_INT_DIVIDED_BY_ZERO, idt);
+    // set exceptions
+    // divided by zero
+    let idt = GateDescriptor::new(handler!(ex_divided_by_zero) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(EX_INT_DIVIDED_BY_ZERO, idt);
 
-    // // double fault
-    // let idt = GateDescriptor::new(handler!(ex_double_fault) as u32, IDT_INT_SELECTOR, INTGATE);
-    // write_idt(EX_INT_DOUBLE_FAULT, idt);
+    // double fault
+    let idt = GateDescriptor::new(handler!(ex_double_fault) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(EX_INT_DOUBLE_FAULT, idt);
 
-    // // general protection fault
-    // let idt = GateDescriptor::new(handler!(ex_general_protection_fault) as u32, IDT_INT_SELECTOR, INTGATE);
-    // write_idt(EX_INT_GENERAL_PROTECTION_FAULT, idt);
+    // general protection fault
+    let idt = GateDescriptor::new(handler!(ex_general_protection_fault) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(EX_INT_GENERAL_PROTECTION_FAULT, idt);
 
-    // // breakpoint
-    // let idt = GateDescriptor::new(handler!(ex_breakpoint) as u32, IDT_INT_SELECTOR, INTGATE);
-    // write_idt(EX_INT_BREAKPOINT, idt);
+    // breakpoint
+    let idt = GateDescriptor::new(handler!(ex_breakpoint) as u32, IDT_INT_SELECTOR, INTGATE);
+    write_idt(EX_INT_BREAKPOINT, idt);
 
     // set interrupts
     // PS/2 keyboard

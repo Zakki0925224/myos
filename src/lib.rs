@@ -42,13 +42,21 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     int::init_pic();
     int::enable_mouse();
     mem::init(&boot_info);
+
+    if PAGING.lock().is_enabled()
+    {
+        sgm::enable_page_fault_handler();
+    }
+
     device::init();
+
+    asm::test();
 
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
 
     let mut console = SystemConsole::new();
     console.start();
-    asm::sti();
+    //asm::sti();
 
     // #[cfg(test)]
     // test_main();
