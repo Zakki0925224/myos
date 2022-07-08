@@ -21,7 +21,7 @@ pub fn init(boot_info: &BootInformation)
     PHYS_MEM_MANAGER.lock().init(boot_info);
 
     PAGING.lock().init();
-    PAGING.lock().enable(); // disabled until the problem is resolved
+    PAGING.lock().enable();
 
     if PAGING.lock().is_enabled()
     {

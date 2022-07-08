@@ -54,7 +54,6 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 
     let mut console = SystemConsole::new();
     console.start();
-    asm::sti();
 
     // #[cfg(test)]
     // test_main();
@@ -66,7 +65,6 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
         if KEYBUF.lock().status() != 0
         {
             let key = KEYBUF.lock().get().unwrap();
-            asm::sti();
             let e = keyboard.input(key);
 
             if !e.eq(&None)
@@ -78,12 +76,14 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
                     console.input_char(asc.unwrap());
                 }
             }
+
+            asm::sti();
         }
         else if MOUSEBUF.lock().status() != 0
         {
             let i = MOUSEBUF.lock().get().unwrap();
-            asm::sti();
             //log_debug("mouse", i);
+            asm::sti();
         }
         else
         {

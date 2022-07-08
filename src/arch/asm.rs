@@ -36,10 +36,7 @@ pub fn test()
 
 pub fn load_idtr(limit: i32, addr: i32)
 {
-    unsafe
-    {
-        asm!("lidt [{}]", in(reg) &Dtr { limit: limit as i16, base: addr });
-    }
+    unsafe { asm!("lidt [{}]", in(reg) &Dtr { limit: limit as i16, base: addr }); }
 }
 
 pub fn load_gdtr(limit: i32, addr: i32)
@@ -65,19 +62,22 @@ pub fn get_cr3() -> u32
 
 pub fn invlpg(virt_addr: u32)
 {
-    cli();
+    //cli();
     unsafe { asm!("invlpg {}", in(reg) virt_addr); }
-    sti();
+    //sti();
 }
 
 pub fn enable_paging()
 {
     //cli();
-    unsafe { asm!("push eax"); }
-    unsafe { asm!("mov eax, cr0"); }
-    unsafe { asm!("or eax, 0x80000000"); }
-    unsafe { asm!("mov cr0, eax"); }
-    unsafe { asm!("pop eax"); }
+    unsafe
+    {
+        asm!("push eax");
+        asm!("mov eax, cr0");
+        asm!("or eax, 0x80000001");
+        asm!("mov cr0, eax");
+        asm!("pop eax");
+    }
     //sti();
 }
 
