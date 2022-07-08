@@ -72,13 +72,13 @@ pub fn invlpg(virt_addr: u32)
 
 pub fn enable_paging()
 {
-    cli();
+    //cli();
     unsafe { asm!("push eax"); }
     unsafe { asm!("mov eax, cr0"); }
     unsafe { asm!("or eax, 0x80000000"); }
     unsafe { asm!("mov cr0, eax"); }
     unsafe { asm!("pop eax"); }
-    sti();
+    //sti();
 }
 
 pub fn out8(port: u32, data: u8)

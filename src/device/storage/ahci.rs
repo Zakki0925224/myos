@@ -209,20 +209,20 @@ impl Ahci
             return;
         }
 
-        let mut pcr = self.read_port_ctrl_regs(port_num);
-        let a = pcr.sata_active + 114514;
-        println!("{}", pcr.sata_active);
-        println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
-        pcr.sata_active = a;
-        self.write_port_ctrl_regs(port_num, pcr);
-        println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
+        // let mut pcr = self.read_port_ctrl_regs(port_num);
+        // let a = pcr.sata_active + 256;
+        // println!("{}", pcr.sata_active);
+        // println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
+        // pcr.sata_active = a;
+        // self.write_port_ctrl_regs(port_num, pcr);
+        // println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
 
-        let mut pcr = self.read_port_ctrl_regs(port_num);
-        pcr.cmd = 100;
-        self.write_port_ctrl_regs(port_num, pcr);
-        println!("{}", self.read_port_ctrl_regs(port_num).cmd);
-        self.write_port_ctrl_regs(port_num, pcr);
-        println!("{:?}", &self.read_port_ctrl_regs(port_num).sata_active);
+        // let mut pcr = self.read_port_ctrl_regs(port_num);
+        // pcr.cmd = 100;
+        // self.write_port_ctrl_regs(port_num, pcr);
+        // println!("{}", self.read_port_ctrl_regs(port_num).cmd);
+        // self.write_port_ctrl_regs(port_num, pcr);
+        // println!("{:?}", &self.read_port_ctrl_regs(port_num).sata_active);
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>

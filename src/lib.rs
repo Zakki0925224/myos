@@ -50,13 +50,11 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 
     device::init();
 
-    asm::test();
-
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
 
     let mut console = SystemConsole::new();
     console.start();
-    //asm::sti();
+    asm::sti();
 
     // #[cfg(test)]
     // test_main();

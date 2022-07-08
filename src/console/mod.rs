@@ -1,4 +1,4 @@
-use crate::{print, println, util::logger::*, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem, arch::vga::{VGA_SCREEN, Color}};
+use crate::{print, println, util::logger::*, data::fifo::Fifo, device::{PCI, AHCI}, meta, mem, arch::{vga::{VGA_SCREEN, Color}, asm}};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -106,6 +106,7 @@ impl SystemConsole
             ['m', 'f', 'r', 'e', 'e'] => self.do_process(|| mem::free()),
             ['k', 'm', 'e', 't', 'a'] => self.do_process(|| meta::print_info()),
             ['c', 'l', 'e', 'a', 'r'] => self.do_process(|| VGA_SCREEN.lock().cls()),
+            ['i', 't', 'e', 's', 't'] => self.do_process(|| asm::test()),
             _ => println!("\nUnknown command")
         }
     }
