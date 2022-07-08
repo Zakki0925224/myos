@@ -62,14 +62,14 @@ pub fn get_cr3() -> u32
 
 pub fn invlpg(virt_addr: u32)
 {
-    //cli();
+    cli();
     unsafe { asm!("invlpg {}", in(reg) virt_addr); }
-    //sti();
+    sti();
 }
 
 pub fn enable_paging()
 {
-    //cli();
+    cli();
     unsafe
     {
         asm!("push eax");
@@ -78,7 +78,7 @@ pub fn enable_paging()
         asm!("mov cr0, eax");
         asm!("pop eax");
     }
-    //sti();
+    sti();
 }
 
 pub fn out8(port: u32, data: u8)
