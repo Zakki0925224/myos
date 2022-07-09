@@ -34,17 +34,16 @@ pub fn init()
         log_warn("Failed to initialize USB controller");
     }
 
-    // TODO: AHCI.read_hba_regs()
     // ahci
-    // AHCI.lock().init();
+    AHCI.lock().init();
 
-    // if AHCI.lock().is_init()
-    // {
-    //     AHCI.lock().read(0, 10);
-    //     log_info("AHCI controller initialized");
-    // }
-    // else
-    // {
-    //     log_warn("Failed to initialize AHCI controller");
-    // }
+    if AHCI.lock().is_init()
+    {
+        AHCI.lock().read(0, 10);
+        log_info("AHCI controller initialized");
+    }
+    else
+    {
+        log_warn("Failed to initialize AHCI controller");
+    }
 }

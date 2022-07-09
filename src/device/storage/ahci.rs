@@ -2,7 +2,7 @@ use core::ptr::{read_volatile, write_volatile};
 
 use modular_bitfield::{bitfield, prelude::*};
 
-use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}};
+use crate::{util::logger::*, device::{pci::{PciDevice, BaseAddressRegister}, PCI}, println, mem::{PHYS_MEM_MANAGER, phys_mem::{MemoryBlockInfo, MEM_BLOCK_SIZE}}, print};
 
 const PCI_AHCI_BASE_CLASS_CODE: u8 = 0x01;
 const PCI_AHCI_SUB_CLASS_CODE: u8 = 0x06;
@@ -22,8 +22,11 @@ const PORT_CMD_FRE_MASK: u32 = 0x10;
 const PORT_CMD_FR_MASK: u32 = 0x4000;
 const PORT_CMD_CR_MASK: u32 = 0x8000;
 
-const FIS_H2D_REGS_SIZE: u8 = 20;
-const FIS_D2H_REGS_SIZE: u8 = 20;
+const FIS_H2D_REGS_SIZE: u32 = 20;
+const FIS_D2H_REGS_SIZE: u32 = 20;
+const PORT_CTRL_REGS_SIZE: u32 = 128;
+
+const HBA_TO_PCR_OFFSET: u32 = 256;
 
 #[derive(Debug, PartialEq)]
 enum PortType
@@ -111,32 +114,68 @@ impl Ahci
         }
     }
 
-    fn read_port_ctrl_regs(&self, port_num: usize) -> PortControlRegisters
+    fn read_port_ctrl_regs(&self, port_num: usize) -> Option<PortControlRegisters>
     {
-        return self.read_hba_mem_regs().port_ctrl_regs[port_num];
+        if !self.is_available_port_num(port_num)
+        {
+            return None;
+        }
+
+        let hba_base_addr = self.hba_base_addr;
+        let offset = HBA_TO_PCR_OFFSET + PORT_CTRL_REGS_SIZE * port_num as u32;
+
+        unsafe
+        {
+            let ptr = (hba_base_addr + offset) as *const PortControlRegisters;
+            return Some(read_volatile(ptr));
+        }
     }
 
     fn write_port_ctrl_regs(&self, port_num: usize, port_ctrl_regs: PortControlRegisters)
     {
-        let mut hba_mem_regs = self.read_hba_mem_regs();
-        hba_mem_regs.port_ctrl_regs[port_num] = port_ctrl_regs;
-        self.write_hba_mem_regs(hba_mem_regs);
+        if !self.is_available_port_num(port_num)
+        {
+            return;
+        }
+
+        let hba_base_addr = self.hba_base_addr;
+        let offset = HBA_TO_PCR_OFFSET + PORT_CTRL_REGS_SIZE * port_num as u32;
+
+        unsafe
+        {
+            let ptr = (hba_base_addr + offset) as *mut PortControlRegisters;
+            write_volatile(ptr, port_ctrl_regs);
+        }
     }
 
-    fn read_cmd_header(&self, port_num: usize, header_index: usize) -> CommandHeader
+    fn read_cmd_header(&self, port_num: usize, header_index: usize) -> Option<CommandHeader>
     {
-        let addr = self.read_port_ctrl_regs(port_num).cmd_list_base_addr_low + header_index as u32;
+        let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+
+        if port_ctrl_regs == None
+        {
+            return None;
+        }
+
+        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + header_index as u32;
 
         unsafe
         {
             let ptr = addr as *const CommandHeader;
-            return read_volatile(ptr);
+            return Some(read_volatile(ptr));
         }
     }
 
     fn write_cmd_header(&self, port_num: usize, header_index: usize, cmd_header: CommandHeader)
     {
-        let addr = self.read_port_ctrl_regs(port_num).cmd_list_base_addr_low + header_index as u32;
+        let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+
+        if port_ctrl_regs == None
+        {
+            return;
+        }
+
+        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + header_index as u32;
 
         unsafe
         {
@@ -152,8 +191,10 @@ impl Ahci
             return None;
         }
 
-        let status = self.read_port_ctrl_regs(port_num).sata_status;
-        let sig = self.read_port_ctrl_regs(port_num).sig;
+        let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+
+        let status = port_ctrl_regs.sata_status;
+        let sig = port_ctrl_regs.sig;
         let ipm = ((status >> 8) & 0xf) as u8;
         let det = (status & 0xf) as u8;
 
@@ -208,21 +249,6 @@ impl Ahci
         {
             return;
         }
-
-        // let mut pcr = self.read_port_ctrl_regs(port_num);
-        // let a = pcr.sata_active + 256;
-        // println!("{}", pcr.sata_active);
-        // println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
-        // pcr.sata_active = a;
-        // self.write_port_ctrl_regs(port_num, pcr);
-        // println!("{}", self.read_port_ctrl_regs(port_num).sata_active);
-
-        // let mut pcr = self.read_port_ctrl_regs(port_num);
-        // pcr.cmd = 100;
-        // self.write_port_ctrl_regs(port_num, pcr);
-        // println!("{}", self.read_port_ctrl_regs(port_num).cmd);
-        // self.write_port_ctrl_regs(port_num, pcr);
-        // println!("{:?}", &self.read_port_ctrl_regs(port_num).sata_active);
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
@@ -232,7 +258,7 @@ impl Ahci
             return None;
         }
 
-        let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+        let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
         let mut slots = port_ctrl_regs.sata_active | port_ctrl_regs.cmd_issue;
 
         for i in 0..MAX_PORT_COUNT as u32
@@ -291,10 +317,10 @@ impl Ahci
         }
 
         self.lock_port_cmd(port_num);
-        let mut port_ctrl_reg = self.read_port_ctrl_regs(port_num);
 
         // setup command list memory area
         let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+        let mut port_ctrl_reg = self.read_port_ctrl_regs(port_num).unwrap();
 
         if mb_info != None
         {
@@ -320,7 +346,7 @@ impl Ahci
             //set command headers
             for i in 0..MAX_PORT_COUNT
             {
-                let mut cmd_header = self.read_cmd_header(port_num, i);
+                let mut cmd_header = self.read_cmd_header(port_num, i).unwrap();
                 cmd_header.set_phys_region_desc_table_len(8); // 8 ptrd entry per command table
 
                 let mut cmd_table_base_addr = mem_areas[i / 2].mem_block_start_addr;
@@ -367,7 +393,7 @@ impl Ahci
             return;
         }
 
-        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
 
         // clear ST (bit0)
         port_ctrl_regs.cmd &= !PORT_CMD_ST_MASK;
@@ -378,7 +404,7 @@ impl Ahci
         //wait until FR (bit 14) and CR (bit15) are cleared
         loop
         {
-            let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+            let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
             if (port_ctrl_regs.cmd & PORT_CMD_FR_MASK) == 0 &&
                (port_ctrl_regs.cmd & PORT_CMD_CR_MASK) == 0
             {
@@ -397,7 +423,7 @@ impl Ahci
         // wait until CR (bit15) is cleared
         loop
         {
-            let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+            let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
 
             if (port_ctrl_regs.cmd & PORT_CMD_CR_MASK) == 0
             {
@@ -405,7 +431,7 @@ impl Ahci
             }
         }
 
-        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num);
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
         // set FRE (bit4)
         port_ctrl_regs.cmd |= PORT_CMD_FRE_MASK;
         // set ST (bit0)
@@ -442,12 +468,10 @@ pub struct HostBusAdapterMemoryRegisters
     pub host_cap2: u32,
     pub bios_ho_ctrl: u32,
     reserved: [u32; 29],
-
-    pub vendor_spec_regs: [u32; 24],
-    pub port_ctrl_regs: [PortControlRegisters; MAX_PORT_COUNT]
+    pub vendor_spec_regs: [u32; 24]
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(C)]
 pub struct PortControlRegisters
 {

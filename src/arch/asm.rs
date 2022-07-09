@@ -31,7 +31,7 @@ pub fn sti()
 
 pub fn test()
 {
-    unsafe { asm!("int 8"); }
+    unsafe { asm!("int 3"); }
 }
 
 pub fn load_idtr(limit: i32, addr: i32)
