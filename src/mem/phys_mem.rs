@@ -237,6 +237,18 @@ impl PhysicalMemoryManager
         }
     }
 
+    pub fn memset(&self, base_addr: u32, size: u32, data: u8)
+    {
+        for i in base_addr..base_addr + size
+        {
+            unsafe
+            {
+                let ptr = i as *mut u8;
+                write_volatile(ptr, data);
+            }
+        }
+    }
+
     pub fn get_total_mem_size(&self) -> u32
     {
         return self.total_mem_size;

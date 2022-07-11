@@ -242,13 +242,15 @@ impl Ahci
         return cnt;
     }
 
-    // TODO
     pub fn read(&self, port_num: usize, cnt: u32)
     {
         if !self.is_available_port_num(port_num)
         {
             return;
         }
+
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+        port_ctrl_regs.int_status = 0xffff; // clear interrupt bits
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
