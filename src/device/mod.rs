@@ -39,7 +39,7 @@ pub fn init()
 
     if AHCI.lock().is_init()
     {
-        AHCI.lock().read(0, 10);
+        //AHCI.lock().read(0, 10);
         log_info("AHCI controller initialized");
     }
     else

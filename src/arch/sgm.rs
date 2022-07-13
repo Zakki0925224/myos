@@ -14,7 +14,7 @@ const INTGATE: u8 = 0x8e;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-pub struct SegmentDescriptor
+struct SegmentDescriptor
 {
     limit_low: u16,
     base_low: u16,
@@ -46,7 +46,7 @@ impl SegmentDescriptor
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-pub struct GateDescriptor
+struct GateDescriptor
 {
     base_low: u16,
     selector: u16,

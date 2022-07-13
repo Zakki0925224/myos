@@ -21,7 +21,7 @@ GRUBを使ったrust製自作OS
 - [x] Boot loader: GRUB2
 - Screen rendering
   - [x] VGA Text mode
-  - [ ] Own GUI
+  - [ ] VESA BIOS Extensions
 - Device support
   - [x] PS/2 Keyboard (Only ANSI US 104 Keyboard)
   - [x] PS/2 Mouse

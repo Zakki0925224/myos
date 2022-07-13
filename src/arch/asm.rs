@@ -31,7 +31,7 @@ pub fn sti()
 
 pub fn test()
 {
-    unsafe { asm!("int 3"); }
+    unsafe { asm!("int 0x10"); }
 }
 
 pub fn load_idtr(limit: i32, addr: i32)
@@ -115,6 +115,24 @@ pub fn in32(port: u32) -> u32
     let mut data: u32;
     unsafe { asm!("in eax, dx", out("eax") data, in("edx") port); }
     return data;
+}
+
+pub fn get_vesa_bios_info() -> u16
+{
+    let mut ax = 0;
+    unsafe
+    {
+        asm!
+        (
+            "mov {ax}, 0x4f00",
+            //"mov es, 1",
+            //"mov di, 1",
+            "int 0x10",
+            ax = inout(reg) ax
+        );
+    }
+
+    return ax;
 }
 
 #[macro_export]

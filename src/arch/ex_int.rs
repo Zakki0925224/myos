@@ -1,5 +1,7 @@
 use core::panic;
 
+use crate::util::logger::log_warn;
+
 use super::asm;
 
 pub const EX_INT_DIVIDED_BY_ZERO: u32 = 0x0;

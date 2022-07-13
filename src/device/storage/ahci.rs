@@ -22,11 +22,15 @@ const PORT_CMD_FRE_MASK: u32 = 0x10;
 const PORT_CMD_FR_MASK: u32 = 0x4000;
 const PORT_CMD_CR_MASK: u32 = 0x8000;
 
-const FIS_H2D_REGS_SIZE: u32 = 20;
-const FIS_D2H_REGS_SIZE: u32 = 20;
-const PORT_CTRL_REGS_SIZE: u32 = 128;
+const FIS_H2D_REGS_SIZE: u8 = 20;
+const FIS_D2H_REGS_SIZE: u8 = 20;
+const PORT_CTRL_REGS_SIZE: u8 = 128;
+const PRDT_SIZE: u8 = 16;
+const CMD_TABLE_SIZE: u8 = 128 + PRDT_SIZE;
+const CMD_HEADER_SIZE: u8 = 28;
 
 const HBA_TO_PCR_OFFSET: u32 = 256;
+const CMD_TABLE_TO_PRDT_OFFSET: u32 = 128;
 
 #[derive(Debug, PartialEq)]
 enum PortType
@@ -86,10 +90,16 @@ impl Ahci
         // init port memory space
         for i in 0..MAX_PORT_COUNT
         {
-            if self.get_port_type(i) != None &&
-               self.is_impl_port(i) != None
+            let port_type = self.get_port_type(i);
+            let is_impl_port = self.is_impl_port(i);
+            if is_impl_port
             {
-                self.init_port_mem_space(i);
+                println!("[AHCI]: port{} - {:?}", i, port_type);
+
+                if let Some(_) = port_type
+                {
+                    self.init_port_mem_space(i);
+                }
             }
         }
 
@@ -122,7 +132,7 @@ impl Ahci
         }
 
         let hba_base_addr = self.hba_base_addr;
-        let offset = HBA_TO_PCR_OFFSET + PORT_CTRL_REGS_SIZE * port_num as u32;
+        let offset = HBA_TO_PCR_OFFSET + (PORT_CTRL_REGS_SIZE as u32) * port_num as u32;
 
         unsafe
         {
@@ -139,7 +149,7 @@ impl Ahci
         }
 
         let hba_base_addr = self.hba_base_addr;
-        let offset = HBA_TO_PCR_OFFSET + PORT_CTRL_REGS_SIZE * port_num as u32;
+        let offset = HBA_TO_PCR_OFFSET + (PORT_CTRL_REGS_SIZE as u32) * port_num as u32;
 
         unsafe
         {
@@ -148,7 +158,7 @@ impl Ahci
         }
     }
 
-    fn read_cmd_header(&self, port_num: usize, header_index: usize) -> Option<CommandHeader>
+    fn read_cmd_header(&self, port_num: usize, header_index: u32) -> Option<CommandHeader>
     {
         let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
 
@@ -157,7 +167,7 @@ impl Ahci
             return None;
         }
 
-        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + header_index as u32;
+        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + CMD_HEADER_SIZE as u32 * header_index;
 
         unsafe
         {
@@ -166,7 +176,7 @@ impl Ahci
         }
     }
 
-    fn write_cmd_header(&self, port_num: usize, header_index: usize, cmd_header: CommandHeader)
+    fn write_cmd_header(&self, port_num: usize, header_index: u32, cmd_header: CommandHeader)
     {
         let port_ctrl_regs = self.read_port_ctrl_regs(port_num);
 
@@ -175,12 +185,34 @@ impl Ahci
             return;
         }
 
-        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + header_index as u32;
+        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + CMD_HEADER_SIZE as u32 * header_index;
 
         unsafe
         {
             let ptr = addr as *mut CommandHeader;
             write_volatile(ptr, cmd_header);
+        }
+    }
+
+    fn read_cmd_table(&self, cmd_header: &CommandHeader) -> CommandTable
+    {
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+
+        unsafe
+        {
+            let ptr = base_addr as *const CommandTable;
+            return read_volatile(ptr);
+        }
+    }
+
+    fn write_cmd_table(&self, cmd_header: &CommandHeader, cmd_table: CommandTable)
+    {
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+
+        unsafe
+        {
+            let ptr = base_addr as *mut CommandTable;
+            write_volatile(ptr, cmd_table);
         }
     }
 
@@ -218,7 +250,7 @@ impl Ahci
 
         for i in 0..MAX_PORT_COUNT
         {
-            if self.is_impl_port(i).unwrap()
+            if self.is_impl_port(i)
             {
                 cnt += 1;
             }
@@ -242,7 +274,7 @@ impl Ahci
         return cnt;
     }
 
-    pub fn read(&self, port_num: usize, cnt: u32)
+    pub fn read(&self, port_num: usize, cnt: u16)
     {
         if !self.is_available_port_num(port_num)
         {
@@ -250,7 +282,45 @@ impl Ahci
         }
 
         let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+
         port_ctrl_regs.int_status = 0xffff; // clear interrupt bits
+        self.write_port_ctrl_regs(port_num, port_ctrl_regs);
+        let slot = self.find_cmd_slot(port_num);
+
+        if slot == None
+        {
+            return;
+        }
+
+        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap());
+
+        if cmd_header == None
+        {
+            return;
+        }
+
+        // TODO: why cmd header is all 0?
+        println!("0x{:x}", port_ctrl_regs.cmd_list_base_addr_low);
+        unsafe
+        {
+            let ptr = port_ctrl_regs.cmd_list_base_addr_low as *const u32;
+            println!("{}", read_volatile(ptr));
+        }
+        // for i in 0..32
+        // {
+        //     println!("{}: ", i);
+        //     println!("{:?}", self.read_cmd_header(port_num, i));
+        // }
+
+        cmd_header.unwrap().set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
+        cmd_header.unwrap().set_write(0);
+        cmd_header.unwrap().set_phys_region_desc_table_len(((cnt - 1) >> 4) + 1);
+
+        let mut cmd_table = self.read_cmd_table(&cmd_header.unwrap());
+        let base_addr = cmd_header.unwrap().cmd_table_desc_base_addr_low();
+        let size = CMD_TABLE_SIZE as u32 + (cmd_header.unwrap().phys_region_desc_table_len() as u32 - 1) * PRDT_SIZE as u32;
+        PHYS_MEM_MANAGER.lock().memset(base_addr, size, 0);
+
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
@@ -292,7 +362,7 @@ impl Ahci
         {
             let port_type = self.get_port_type(i);
 
-            if !self.is_impl_port(i).unwrap() || port_type == None
+            if !self.is_impl_port(i) || port_type == None
             {
                 continue;
             }
@@ -301,14 +371,14 @@ impl Ahci
         }
     }
 
-    fn is_impl_port(&self, port_num: usize) -> Option<bool>
+    fn is_impl_port(&self, port_num: usize) -> bool
     {
         if !self.is_available_port_num(port_num)
         {
-            return None;
+            return false;
         }
 
-        return Some(((self.read_hba_mem_regs().port_impl >> port_num) & 0x1) != 0);
+        return ((self.read_hba_mem_regs().port_impl >> port_num) & 0x1) != 0;
     }
 
     fn init_port_mem_space(&self, port_num: usize)
@@ -322,12 +392,12 @@ impl Ahci
 
         // setup command list memory area
         let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
-        let mut port_ctrl_reg = self.read_port_ctrl_regs(port_num).unwrap();
+        let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
 
         if mb_info != None
         {
-            port_ctrl_reg.cmd_list_base_addr_low = mb_info.unwrap().mem_block_start_addr;
-            port_ctrl_reg.cmd_list_base_addr_high = 0;
+            port_ctrl_regs.cmd_list_base_addr_low = mb_info.unwrap().mem_block_start_addr;
+            port_ctrl_regs.cmd_list_base_addr_high = 0;
 
             // allocate memory areas for command table
             let mut mem_areas = [MemoryBlockInfo::new(); 16];
@@ -348,7 +418,7 @@ impl Ahci
             //set command headers
             for i in 0..MAX_PORT_COUNT
             {
-                let mut cmd_header = self.read_cmd_header(port_num, i).unwrap();
+                let mut cmd_header = self.read_cmd_header(port_num, i as u32).unwrap();
                 cmd_header.set_phys_region_desc_table_len(8); // 8 ptrd entry per command table
 
                 let mut cmd_table_base_addr = mem_areas[i / 2].mem_block_start_addr;
@@ -361,7 +431,7 @@ impl Ahci
                 cmd_header.set_cmd_table_desc_base_addr_low(cmd_table_base_addr);
                 cmd_header.set_cmd_table_desc_base_addr_high(0);
 
-                self.write_cmd_header(port_num, i, cmd_header);
+                self.write_cmd_header(port_num, i as u32, cmd_header);
             }
         }
         else
@@ -370,22 +440,23 @@ impl Ahci
             return;
         }
 
+        println!("d");
         // setup FIS struct memory area
         let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
         if mb_info != None
         {
-            port_ctrl_reg.fis_base_addr_low = mb_info.unwrap().mem_block_start_addr;
-            port_ctrl_reg.fis_base_addr_high = 0;
+            port_ctrl_regs.fis_base_addr_low = mb_info.unwrap().mem_block_start_addr;
+            port_ctrl_regs.fis_base_addr_high = 0;
         }
         else
         {
             println!("Failed to initialize port{} memory space", port_num);
         }
 
-        self.write_port_ctrl_regs(port_num, port_ctrl_reg);
+        self.write_port_ctrl_regs(port_num, port_ctrl_regs);
         self.unlock_port_cmd(port_num);
 
-        println!("Port{} memory space initialized", port_num);
+        println!("[AHCI]: Port{} memory space initialized", port_num);
     }
 
     fn lock_port_cmd(&self, port_num: usize)
@@ -455,7 +526,7 @@ impl Ahci
 
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-pub struct HostBusAdapterMemoryRegisters
+struct HostBusAdapterMemoryRegisters
 {
     // 0x0 - 0x2b generic host control
     pub host_cap: u32,
@@ -475,7 +546,7 @@ pub struct HostBusAdapterMemoryRegisters
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(C)]
-pub struct PortControlRegisters
+struct PortControlRegisters
 {
     pub cmd_list_base_addr_low: u32,
     pub cmd_list_base_addr_high: u32,
@@ -499,9 +570,9 @@ pub struct PortControlRegisters
 }
 
 #[bitfield]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(C)]
-pub struct CommandHeader
+struct CommandHeader
 {
     pub cmd_fis_len: B5,                        // command FIS length
     pub atapi: B1,                              // ATAPI
@@ -526,10 +597,32 @@ pub struct CommandHeader
     reserved4: B32
 }
 
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct CommandTable
+{
+    pub cmd_fis: [u8; 64],
+    pub atapi_cmd: [u8; 16],
+    reserved: [u8; 48]
+}
+
 #[bitfield]
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-pub struct FISHostToDeviceRegisters
+struct PhysicalRegionDescriptorTable
+{
+    pub data_base_addr_low: B32,
+    pub data_base_addr_high: B32,
+    reserved0: B32,
+    pub byte_cnt: B22,
+    reserved1: B9,
+    pub int_on_comp: B1
+}
+
+#[bitfield]
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct FISHostToDeviceRegisters
 {
     // dw0
     pub fis_type: B8,
@@ -560,7 +653,7 @@ pub struct FISHostToDeviceRegisters
 #[bitfield]
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-pub struct FISDeviceToHostRegisters
+struct FISDeviceToHostRegisters
 {
     // dw0
     pub fis_type: B8,

@@ -36,7 +36,7 @@ const PTE_FLAGS_R_W: u32 = 0x2;
 const PTE_FLAGS_P: u32 = 0x1;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PageTableEntry
+struct PageTableEntry
 {
     base_addr: u32
 }
@@ -136,7 +136,7 @@ impl PageTableEntry
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PageDirectoryEntry
+struct PageDirectoryEntry
 {
     base_addr: u32
 }
@@ -287,28 +287,27 @@ impl Paging
         let mut i = 0;
         loop
         {
+            if PHYS_MEM_MANAGER.lock().get_total_mem_size() - i < MEM_BLOCK_SIZE
+            {
+                break;
+            }
+
             let va = VirtualAddress::new(i);
 
             let pd_i = va.get_page_directory_index();
             let pt_i = va.get_page_table_index();
-            let mut pte = self.get_page_table_entry(pd_i, pt_i);
-            pte.set(i, PTE_FLAGS_P | PTE_FLAGS_R_W);
 
             if pt_i == 0
             {
                 let mut pde = self.get_page_directory_entry(pd_i);
-                let pt_block = self.pt_blocks.get(pd_i).unwrap();
+                let pt_block = self.pt_blocks[pd_i];
                 pde.set(pt_block.mem_block_start_addr, PDE_FLAGS_P | PDE_FLAGS_R_W);
             }
 
-            if u32::MAX - i < MEM_BLOCK_SIZE || i + MEM_BLOCK_SIZE > PHYS_MEM_MANAGER.lock().get_total_mem_size()
-            {
-                break;
-            }
-            else
-            {
-                i += MEM_BLOCK_SIZE;
-            }
+            let mut pte = self.get_page_table_entry(pd_i, pt_i);
+            pte.set(i, PTE_FLAGS_P | PTE_FLAGS_R_W);
+
+            i += MEM_BLOCK_SIZE;
         }
 
         self.is_init = true;
