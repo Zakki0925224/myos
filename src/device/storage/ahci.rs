@@ -292,34 +292,25 @@ impl Ahci
             return;
         }
 
-        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap());
-
-        if cmd_header == None
-        {
-            return;
-        }
+        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap()).unwrap();
 
         // TODO: why cmd header is all 0?
-        println!("0x{:x}", port_ctrl_regs.cmd_list_base_addr_low);
-        unsafe
-        {
-            let ptr = port_ctrl_regs.cmd_list_base_addr_low as *const u32;
-            println!("{}", read_volatile(ptr));
-        }
-        // for i in 0..32
-        // {
-        //     println!("{}: ", i);
-        //     println!("{:?}", self.read_cmd_header(port_num, i));
-        // }
+        cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
+        cmd_header.set_write(0);
+        cmd_header.set_phys_region_desc_table_len(((cnt - 1) >> 4) + 1);
+        self.write_cmd_header(port_num, slot.unwrap(), cmd_header);
 
-        cmd_header.unwrap().set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
-        cmd_header.unwrap().set_write(0);
-        cmd_header.unwrap().set_phys_region_desc_table_len(((cnt - 1) >> 4) + 1);
+        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap()).unwrap();
 
-        let mut cmd_table = self.read_cmd_table(&cmd_header.unwrap());
-        let base_addr = cmd_header.unwrap().cmd_table_desc_base_addr_low();
-        let size = CMD_TABLE_SIZE as u32 + (cmd_header.unwrap().phys_region_desc_table_len() as u32 - 1) * PRDT_SIZE as u32;
+        println!("{:?}", cmd_header);
+
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+        let size = CMD_TABLE_SIZE as u32 + (cmd_header.phys_region_desc_table_len() as u32 - 1) * PRDT_SIZE as u32;
         PHYS_MEM_MANAGER.lock().memset(base_addr, size, 0);
+
+        let mut cmd_table = self.read_cmd_table(&cmd_header);
+
+        println!("{:?}", cmd_table);
 
     }
 
@@ -440,7 +431,6 @@ impl Ahci
             return;
         }
 
-        println!("d");
         // setup FIS struct memory area
         let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
         if mb_info != None

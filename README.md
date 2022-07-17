@@ -1,18 +1,20 @@
 # myos
 GRUBを使ったrust製自作OS
 ## Used tools
-* rust (nightly)
 * cargo
 * cargo-xbuild
-* qemu
-* qemu-arch-extra
-* nasm
-* mtools
+* dd
+* find
 * go-task
-* xorriso
 * grub
 * ld
-* dd
+* mtools
+* nasm
+* qemu
+* qemu-arch-extra
+* rust (nightly)
+* xargs
+* xorriso
 
 ## Features
 - [x] x86 support

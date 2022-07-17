@@ -11,14 +11,14 @@ vars:
         kernel
         multiboot_header
         extfunc
+    FS_DIR: fs
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
     KERNEL_FILE: kernel.bin
     LINKER_FILE: linker.ld
     OS_IMAGE_FILE: os.iso
     GRUB_FILE: grub.cfg
-    HDD_FILE: hdd.img
-    HDD_ROOT_DIR: root
+    FS_FILE: fs.img
 
     ASM_EX: .asm
     OBJ_EX: .o
@@ -28,7 +28,7 @@ vars:
     QEMU_DEVICES: |
         qemu-xhci
         ahci,id=ahci
-    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -no-reboot -no-shutdown -m 4G {{range .QEMU_DEVICES | splitLines -}}{{if .}}-device {{.}} {{end}}{{end -}} -drive id=disk,file={{$.OUTPUT_DIR}}/{{$.HDD_FILE}},if=none -device ide-hd,drive=disk,bus=ahci.0 -boot order=d -serial mon:stdio
+    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -no-reboot -no-shutdown -m 4G {{range .QEMU_DEVICES | splitLines -}}{{if .}}-device {{.}} {{end}}{{end -}} -boot order=d -serial mon:stdio
 
 
 tasks:
@@ -52,20 +52,23 @@ tasks:
                 {{range .X86_DIR_FILES | splitLines -}}
                 {{if .}}{{$.NASM}} {{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}} {{$.X86_DIR}}/{{.}}{{$.ASM_EX}}{{end}}
                 {{end -}}
-                {{.LD}} {{range .X86_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
+                {{$.LD}} {{range .X86_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
 
-    makehdd:
+    makefs:
+        dir: "{{$.FS_DIR}}"
         cmds:
-            - dd if=/dev/zero of={{$.OUTPUT_DIR}}/{{$.HDD_FILE}} bs=1M count=40 # 40MB
-            - "mformat -i {{$.OUTPUT_DIR}}/{{$.HDD_FILE}} :: -F"
-            - "mcopy -i {{$.OUTPUT_DIR}}/{{$.HDD_FILE}} -s {{$.HDD_ROOT_DIR}} :: "
+            - dd if=/dev/zero of=../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} bs=1M count=128
+            - "mformat -i ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} :: -F"
+            - "find . -mindepth 1 -print | xargs -IX mcopy -i ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} -s X ::;"
 
 
     build:
-        deps: [makeelf]
         cmds:
+            - task: makeelf
+            - task: makefs
             - mkdir -p {{$.OUTPUT_DIR}}/isofiles/boot/grub
             - cp {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/
+            - cp {{$.OUTPUT_DIR}}/{{$.FS_FILE}} {{$.OUTPUT_DIR}}/isofiles/
             - cp {{$.GRUB_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/grub/
             - grub-mkrescue -o {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} {{$.OUTPUT_DIR}}/isofiles 2> /dev/null
             - rm -r {{$.OUTPUT_DIR}}/isofiles
@@ -73,13 +76,12 @@ tasks:
     run:
         deps: [build]
         cmds:
-            - task makehdd
             - "{{$.QEMU}}"
 
     debug:
         deps: [build]
         cmds:
-            - task makehdd
+            - task: makehdd
             - "{{$.QEMU}} -s -S"
 
     gdb:
