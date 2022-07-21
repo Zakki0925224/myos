@@ -28,7 +28,10 @@ vars:
     QEMU_DEVICES: |
         qemu-xhci
         ahci,id=ahci
-    QEMU: qemu-system-i386 -cdrom {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} -no-reboot -no-shutdown -m 4G {{range .QEMU_DEVICES | splitLines -}}{{if .}}-device {{.}} {{end}}{{end -}} -boot order=d -serial mon:stdio
+        ide-cd,drive=disk,bus=ahci.0
+    QEMU_DRIVES: |
+        id=disk,file={{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}},if=none,format=raw
+    QEMU: qemu-system-i386 -no-reboot -no-shutdown -m 4G {{range .QEMU_DRIVES | splitLines -}}{{if .}}-drive {{.}} {{end}}{{end -}} {{range .QEMU_DEVICES | splitLines -}}{{if .}}-device {{.}} {{end}}{{end -}} -boot order=d -serial mon:stdio
 
 
 tasks:

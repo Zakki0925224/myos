@@ -270,14 +270,14 @@ impl Paging
             return;
         }
 
-        PHYS_MEM_MANAGER.lock().clear_mem_block(self.pd_block);
+        PHYS_MEM_MANAGER.lock().clear_mem_block(&self.pd_block);
 
         // allocate block for page table memory
         for i in 0..self.pt_blocks.len()
         {
             let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
             self.pt_blocks[i] = mb_info.unwrap();
-            PHYS_MEM_MANAGER.lock().clear_mem_block(self.pt_blocks[i]);
+            PHYS_MEM_MANAGER.lock().clear_mem_block(&self.pt_blocks[i]);
         }
 
         // back up cr3 address
@@ -345,7 +345,7 @@ impl Paging
 
         if let Some(mb_info) = PHYS_MEM_MANAGER.lock().alloc_single_mem_block()
         {
-            PHYS_MEM_MANAGER.lock().clear_mem_block(mb_info);
+            PHYS_MEM_MANAGER.lock().clear_mem_block(&mb_info);
             let pd_i = self.get_page_directory_index(mb_info.mem_block_index);
             let pt_i = self.get_page_table_index(mb_info.mem_block_index);
             let mut pte = self.get_page_table_entry(pd_i, pt_i);
@@ -367,7 +367,7 @@ impl Paging
         }
 
         PHYS_MEM_MANAGER.lock().dealloc_single_mem_block(mem_block);
-        PHYS_MEM_MANAGER.lock().clear_mem_block(mem_block);
+        PHYS_MEM_MANAGER.lock().clear_mem_block(&mem_block);
         let pd_i = self.get_page_directory_index(mem_block.mem_block_index);
         let pt_i = self.get_page_table_index(mem_block.mem_block_index);
         let mut pte = self.get_page_table_entry(pd_i, pt_i);

@@ -1,4 +1,4 @@
-use multiboot2::{BootInformation, MemoryArea};
+use multiboot2::{BootInformation, MemoryArea, ModuleTag};
 
 pub fn get_total_mem_size(boot_info: &BootInformation) -> u64
 {
@@ -44,4 +44,10 @@ pub fn get_multiboot_size(boot_info: &BootInformation) -> u64
 {
     let (start, end) = get_multiboot_addr(boot_info);
     return end - start;
+}
+
+pub fn get_module_tags(boot_info: &BootInformation) -> impl Iterator<Item = &ModuleTag>
+{
+    let module_tag = boot_info.module_tags();
+    return module_tag;
 }

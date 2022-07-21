@@ -32,6 +32,11 @@ const CMD_HEADER_SIZE: u8 = 28;
 const HBA_TO_PCR_OFFSET: u32 = 256;
 const CMD_TABLE_TO_PRDT_OFFSET: u32 = 128;
 
+const ATA_CMD_READ: u8 = 0x25;
+const ATA_CMD_WRITE: u8 = 0x35;
+const ATA_DEV_BUSY: u8 = 0x80;
+const ATA_DEV_DRQ: u8 = 0x08;
+
 #[derive(Debug, PartialEq)]
 enum PortType
 {
@@ -205,6 +210,17 @@ impl Ahci
         }
     }
 
+    fn read_init_cmd_table(&self, cmd_header: &CommandHeader) -> CommandTable
+    {
+        let mut cmd_table = self.read_cmd_table(cmd_header);
+        cmd_table.cmd_fis = [0; 64];
+        cmd_table.atapi_cmd = [0; 16];
+        cmd_table.reserved = [0; 48];
+        self.write_cmd_table(cmd_header, cmd_table);
+
+        return self.read_cmd_table(cmd_header);
+    }
+
     fn write_cmd_table(&self, cmd_header: &CommandHeader, cmd_table: CommandTable)
     {
         let base_addr = cmd_header.cmd_table_desc_base_addr_low();
@@ -213,6 +229,72 @@ impl Ahci
         {
             let ptr = base_addr as *mut CommandTable;
             write_volatile(ptr, cmd_table);
+        }
+    }
+
+    fn read_prdt(&self, cmd_header: &CommandHeader, index: u16) -> PhysicalRegionDescriptorTable
+    {
+        let base_addr = (cmd_header.cmd_table_desc_base_addr_low() + CMD_TABLE_TO_PRDT_OFFSET) + PRDT_SIZE as u32 * index as u32;
+
+        unsafe
+        {
+            let ptr = base_addr as *mut PhysicalRegionDescriptorTable;
+            return read_volatile(ptr);
+        }
+    }
+
+    fn write_prdt(&self, cmd_header: &CommandHeader, index: u16, prdt: PhysicalRegionDescriptorTable)
+    {
+        let base_addr = (cmd_header.cmd_table_desc_base_addr_low() + CMD_TABLE_TO_PRDT_OFFSET) + PRDT_SIZE as u32 * index as u32;
+
+        unsafe
+        {
+            let ptr = base_addr as *mut PhysicalRegionDescriptorTable;
+            write_volatile(ptr, prdt);
+        }
+    }
+
+    fn read_fis_h2d_regs(&self, cmd_header: &CommandHeader) -> FisHostToDeviceRegisters
+    {
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+
+        unsafe
+        {
+            let ptr = base_addr as *const FisHostToDeviceRegisters;
+            return read_volatile(ptr);
+        }
+    }
+
+    fn write_fis_h2d_regs(&self, cmd_header: &CommandHeader, fis: FisHostToDeviceRegisters)
+    {
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+
+        unsafe
+        {
+            let ptr = base_addr as *mut FisHostToDeviceRegisters;
+            write_volatile(ptr, fis);
+        }
+    }
+
+    fn read_fis_d2h_regs(&self, cmd_header: &CommandHeader) -> FisDeviceToHostRegisters
+    {
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+
+        unsafe
+        {
+            let ptr = base_addr as *const FisDeviceToHostRegisters;
+            return read_volatile(ptr);
+        }
+    }
+
+    fn write_fis_d2h_regs(&self, cmd_header: &CommandHeader, fis: FisDeviceToHostRegisters)
+    {
+        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
+
+        unsafe
+        {
+            let ptr = base_addr as *mut FisDeviceToHostRegisters;
+            write_volatile(ptr, fis);
         }
     }
 
@@ -274,44 +356,123 @@ impl Ahci
         return cnt;
     }
 
-    pub fn read(&self, port_num: usize, cnt: u16)
+    // TODO
+    pub fn read(&self, port_num: usize, start_base_addr_low: u32, start_base_addr_high: u32, mut buf_base_addr: u32, mut sector_cnt: u16) -> Result<(), ()>
     {
         if !self.is_available_port_num(port_num)
         {
-            return;
+            return Err(());
         }
 
         let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
 
         port_ctrl_regs.int_status = 0xffff; // clear interrupt bits
         self.write_port_ctrl_regs(port_num, port_ctrl_regs);
-        let slot = self.find_cmd_slot(port_num);
 
-        if slot == None
+        if let Some(slot) = self.find_cmd_slot(port_num)
         {
-            return;
+            let mut cmd_header = self.read_cmd_header(port_num, slot).unwrap();
+
+            cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
+            cmd_header.set_write(0);
+            cmd_header.set_phys_region_desc_table_len(((sector_cnt - 1) >> 4) + 1);
+            self.write_cmd_header(port_num, slot, cmd_header);
+
+            let cmd_header = self.read_cmd_header(port_num, slot).unwrap();
+            let cmd_table = self.read_init_cmd_table(&cmd_header);
+
+            let mut i = 0;
+            while i < cmd_header.phys_region_desc_table_len() - 1
+            {
+                let mut prdt = self.read_prdt(&cmd_header, i);
+                prdt.set_data_base_addr_low(buf_base_addr);
+                prdt.set_data_base_addr_high(0);
+                prdt.set_byte_cnt(8 * 1024); // 8KB
+                prdt.set_int_on_comp(1);
+                self.write_prdt(&cmd_header, i, prdt);
+
+                buf_base_addr += 4 * 1024;
+                sector_cnt -= 16;
+
+                i += 1;
+            }
+
+            // last entry
+            let mut prdt = self.read_prdt(&cmd_header, i);
+            prdt.set_data_base_addr_low(buf_base_addr);
+            prdt.set_data_base_addr_high(0);
+            prdt.set_byte_cnt((sector_cnt as u32) << 9);
+            prdt.set_int_on_comp(1);
+            self.write_prdt(&cmd_header, i, prdt);
+
+            let mut fis = self.read_fis_h2d_regs(&cmd_header);
+            fis.set_fis_type(FisType::HostToDevice as u8);
+            fis.set_c(1);
+            fis.set_cmd(ATA_CMD_READ);
+            fis.set_lba0(start_base_addr_low as u8);
+            fis.set_lba1((start_base_addr_low >> 8) as u8);
+            fis.set_lba2((start_base_addr_low >> 16) as u8);
+            fis.set_device(1 << 6); // LBA mode
+            fis.set_lba3((start_base_addr_low >> 24) as u8);
+            fis.set_lba4(start_base_addr_high as u8);
+            fis.set_lba5((start_base_addr_high >> 8) as u8);
+            fis.set_cnt_reg_low(sector_cnt as u8);
+            fis.set_cnt_reg_high((sector_cnt << 8) as u8);
+            self.write_fis_h2d_regs(&cmd_header, fis);
+
+            let mut spin = 0;
+
+            loop
+            {
+                let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+
+                if !(((port_ctrl_regs.task_file_data & (ATA_DEV_BUSY | ATA_DEV_DRQ) as u32) != 0) && spin < 1000000)
+                {
+                    break;
+                }
+
+                spin += 1;
+            }
+
+            if spin == 1000000
+            {
+                return Err(());
+            }
+
+            let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+            port_ctrl_regs.cmd_issue = 1 << slot;
+            self.write_port_ctrl_regs(port_num, port_ctrl_regs);
+
+            loop
+            {
+                println!("[AHCI]: Reading disk...");
+
+                let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+
+                if port_ctrl_regs.cmd_issue & (1 << slot) == 0
+                {
+                    break;
+                }
+
+                if (port_ctrl_regs.int_status & (1 << 30)) != 0
+                {
+                    println!("[AHCI]: Read disk error");
+                    return Err(());
+                }
+            }
+
+            let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+
+            if (port_ctrl_regs.int_status & (1 << 30)) != 0
+            {
+                println!("[AHCI]: Read disk error");
+                return Err(());
+            }
+
+            return Ok(());
         }
 
-        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap()).unwrap();
-
-        // TODO: why cmd header is all 0?
-        cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
-        cmd_header.set_write(0);
-        cmd_header.set_phys_region_desc_table_len(((cnt - 1) >> 4) + 1);
-        self.write_cmd_header(port_num, slot.unwrap(), cmd_header);
-
-        let mut cmd_header = self.read_cmd_header(port_num, slot.unwrap()).unwrap();
-
-        println!("{:?}", cmd_header);
-
-        let base_addr = cmd_header.cmd_table_desc_base_addr_low();
-        let size = CMD_TABLE_SIZE as u32 + (cmd_header.phys_region_desc_table_len() as u32 - 1) * PRDT_SIZE as u32;
-        PHYS_MEM_MANAGER.lock().memset(base_addr, size, 0);
-
-        let mut cmd_table = self.read_cmd_table(&cmd_header);
-
-        println!("{:?}", cmd_table);
-
+        return Err(());
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
@@ -612,7 +773,7 @@ struct PhysicalRegionDescriptorTable
 #[bitfield]
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-struct FISHostToDeviceRegisters
+struct FisHostToDeviceRegisters
 {
     // dw0
     pub fis_type: B8,
@@ -643,7 +804,7 @@ struct FISHostToDeviceRegisters
 #[bitfield]
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-struct FISDeviceToHostRegisters
+struct FisDeviceToHostRegisters
 {
     // dw0
     pub fis_type: B8,
@@ -669,4 +830,17 @@ struct FISDeviceToHostRegisters
     reserved3: B16,
     // dw4
     reserved4: B32
+}
+
+#[repr(u8)]
+enum FisType
+{
+    HostToDevice = 0x27,
+    DeviceToHost = 0x34,
+    DmaActive = 0x39,
+    DmaSetup = 0x41,
+    Data = 0x46,
+    Bist = 0x58,
+    PioSetup = 0x5f,
+    DeviceBits = 0xa1
 }

@@ -1,6 +1,6 @@
 use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
-use crate::{println, util::{boot_info::*, logger::*}};
+use crate::{println, util::{boot_info::*, logger::*}, mem};
 
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
@@ -225,15 +225,21 @@ impl PhysicalMemoryManager
         }
     }
 
-    pub fn clear_mem_block(&self, mem_block: MemoryBlockInfo)
+    pub fn clear_mem_block(&self, mem_block: &MemoryBlockInfo)
     {
-        for i in mem_block.mem_block_start_addr..mem_block.mem_block_start_addr + mem_block.mem_block_size
+        //println!("Clearing memory block 0x{:x} - 0x{:x}...", mem_block.mem_block_start_addr, mem_block.mem_block_start_addr + mem_block.mem_block_size);
+
+        let mut i = mem_block.mem_block_start_addr;
+
+        while i < mem_block.mem_block_start_addr + mem_block.mem_block_size
         {
             unsafe
             {
-                let ptr = i as *mut u8;
+                let ptr = i as *mut u32;
                 write_volatile(ptr, 0);
             }
+
+            i += 4;
         }
     }
 

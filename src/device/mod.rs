@@ -1,4 +1,6 @@
-use crate::{device::usb::{Usb, UsbMode}, util::logger::*, println};
+use core::ptr::read_volatile;
+
+use crate::{device::usb::{Usb, UsbMode}, util::logger::*, println, mem::PHYS_MEM_MANAGER};
 use self::{pci::{Pci, PciHeaderType}, storage::ahci::Ahci};
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -39,7 +41,20 @@ pub fn init()
 
     if AHCI.lock().is_init()
     {
-        //AHCI.lock().read(0, 10);
+        let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block().unwrap();
+        if let Ok(()) = AHCI.lock().read(0, 0, 0, mb_info.mem_block_start_addr, 8)
+        {
+            println!("OK!");
+
+            for i in 0..512
+            {
+                unsafe
+                {
+                    let ptr = (mb_info.mem_block_start_addr + i) as *const u8;
+                    println!("{:x}", read_volatile(ptr));
+                }
+            }
+        }
         log_info("AHCI controller initialized");
     }
     else
