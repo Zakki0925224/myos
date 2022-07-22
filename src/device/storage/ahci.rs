@@ -103,7 +103,11 @@ impl Ahci
 
                 if let Some(_) = port_type
                 {
-                    self.init_port_mem_space(i);
+                    match self.init_port_mem_space(i)
+                    {
+                        Ok(_) => println!("port{} memory space initialized", i),
+                        Err(msg) => log_error(msg)
+                    }
                 }
             }
         }
@@ -212,11 +216,7 @@ impl Ahci
 
     fn read_init_cmd_table(&self, cmd_header: &CommandHeader) -> CommandTable
     {
-        let mut cmd_table = self.read_cmd_table(cmd_header);
-        cmd_table.cmd_fis = [0; 64];
-        cmd_table.atapi_cmd = [0; 16];
-        cmd_table.reserved = [0; 48];
-        self.write_cmd_table(cmd_header, cmd_table);
+        PHYS_MEM_MANAGER.lock().memset(cmd_header.cmd_table_desc_base_addr_low(), CMD_TABLE_SIZE as u32 + (cmd_header.phys_region_desc_table_len() - 1) as u32 * PRDT_SIZE as u32, 0);
 
         return self.read_cmd_table(cmd_header);
     }
@@ -356,30 +356,51 @@ impl Ahci
         return cnt;
     }
 
+    pub fn test(&self)
+    {
+        for i in 0..MAX_PORT_COUNT
+        {
+            if !self.is_impl_port(i) || (self.get_port_type(i) == None)
+            {
+                continue;
+            }
+
+            if let Some(slot) = self.find_cmd_slot(i)
+            {
+                let cmd_header = self.read_cmd_header(i, slot).unwrap();
+                println!("port{}, cmd_slot: {}, ctba: 0x{:x}", i, slot, cmd_header.cmd_table_desc_base_addr_high());
+            }
+        }
+    }
+
     // TODO
-    pub fn read(&self, port_num: usize, start_base_addr_low: u32, start_base_addr_high: u32, mut buf_base_addr: u32, mut sector_cnt: u16) -> Result<(), ()>
+    pub fn read(&self, port_num: usize, start_base_addr_low: u32, start_base_addr_high: u32, mut buf_base_addr: u32, mut sector_cnt: u16) -> Result<(), &str>
     {
         if !self.is_available_port_num(port_num)
         {
-            return Err(());
+            return Err("Not available port");
         }
 
         let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
 
-        port_ctrl_regs.int_status = 0xffff; // clear interrupt bits
+        port_ctrl_regs.int_status = 0xffffffff; // clear interrupt bits
+        println!("{:?}", port_ctrl_regs);
         self.write_port_ctrl_regs(port_num, port_ctrl_regs);
 
         if let Some(slot) = self.find_cmd_slot(port_num)
         {
+            println!("slot: {}", slot);
             let mut cmd_header = self.read_cmd_header(port_num, slot).unwrap();
 
             cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
             cmd_header.set_write(0);
             cmd_header.set_phys_region_desc_table_len(((sector_cnt - 1) >> 4) + 1);
+            println!("ctba: 0x{:x}, prdbc: {}, prdtl: {}", cmd_header.cmd_table_desc_base_addr_low(), cmd_header.phys_region_desc_byte_cnt(), cmd_header.phys_region_desc_table_len());
             self.write_cmd_header(port_num, slot, cmd_header);
 
             let cmd_header = self.read_cmd_header(port_num, slot).unwrap();
             let cmd_table = self.read_init_cmd_table(&cmd_header);
+            println!("{:?}", cmd_table);
 
             let mut i = 0;
             while i < cmd_header.phys_region_desc_table_len() - 1
@@ -389,6 +410,7 @@ impl Ahci
                 prdt.set_data_base_addr_high(0);
                 prdt.set_byte_cnt(8 * 1024); // 8KB
                 prdt.set_int_on_comp(1);
+                println!("{:?}", prdt);
                 self.write_prdt(&cmd_header, i, prdt);
 
                 buf_base_addr += 4 * 1024;
@@ -403,6 +425,7 @@ impl Ahci
             prdt.set_data_base_addr_high(0);
             prdt.set_byte_cnt((sector_cnt as u32) << 9);
             prdt.set_int_on_comp(1);
+            println!("{:?}", prdt);
             self.write_prdt(&cmd_header, i, prdt);
 
             let mut fis = self.read_fis_h2d_regs(&cmd_header);
@@ -418,25 +441,32 @@ impl Ahci
             fis.set_lba5((start_base_addr_high >> 8) as u8);
             fis.set_cnt_reg_low(sector_cnt as u8);
             fis.set_cnt_reg_high((sector_cnt << 8) as u8);
+            println!("{:?}", fis);
             self.write_fis_h2d_regs(&cmd_header, fis);
+            println!("{:?}", self.read_cmd_table(&cmd_header));
 
             let mut spin = 0;
 
+            // wait busy
             loop
             {
                 let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
 
-                if !(((port_ctrl_regs.task_file_data & (ATA_DEV_BUSY | ATA_DEV_DRQ) as u32) != 0) && spin < 1000000)
+                println!("tfd: {:032b}", port_ctrl_regs.task_file_data);
+
+                if ((port_ctrl_regs.task_file_data & (ATA_DEV_BUSY | ATA_DEV_DRQ) as u32) != 0) && spin < 1000000
+                {
+                    spin += 1;
+                }
+                else
                 {
                     break;
                 }
-
-                spin += 1;
             }
 
             if spin == 1000000
             {
-                return Err(());
+                return Err("Port is hung");
             }
 
             let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
@@ -448,6 +478,9 @@ impl Ahci
                 println!("[AHCI]: Reading disk...");
 
                 let port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+                println!("cmd_issue: {:032b}", port_ctrl_regs.cmd_issue);
+                println!("int_status: {:032b}", port_ctrl_regs.int_status);
+                println!("slot: {}", slot);
 
                 if port_ctrl_regs.cmd_issue & (1 << slot) == 0
                 {
@@ -456,8 +489,7 @@ impl Ahci
 
                 if (port_ctrl_regs.int_status & (1 << 30)) != 0
                 {
-                    println!("[AHCI]: Read disk error");
-                    return Err(());
+                    return Err("Read disk error when waiting");
                 }
             }
 
@@ -465,14 +497,13 @@ impl Ahci
 
             if (port_ctrl_regs.int_status & (1 << 30)) != 0
             {
-                println!("[AHCI]: Read disk error");
-                return Err(());
+                return Err("Read disk error");
             }
 
             return Ok(());
         }
 
-        return Err(());
+        return Err("Available command slot was not found");
     }
 
     fn find_cmd_slot(&self, port_num: usize) -> Option<u32>
@@ -533,81 +564,60 @@ impl Ahci
         return ((self.read_hba_mem_regs().port_impl >> port_num) & 0x1) != 0;
     }
 
-    fn init_port_mem_space(&self, port_num: usize)
+    fn init_port_mem_space(&self, port_num: usize) -> Result<(), (&str)>
     {
         if !self.is_available_port_num(port_num)
         {
-            return;
+            return Err("Not available port");
         }
 
         self.lock_port_cmd(port_num);
 
-        // setup command list memory area
-        let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
+        let mbs_info = [ PHYS_MEM_MANAGER.lock().alloc_single_mem_block(); 2];
+
+        for mb_info in mbs_info
+        {
+            if let None = mb_info
+            {
+                self.unlock_port_cmd(port_num);
+                return Err("Failed to allocate memory block");
+            }
+        }
+
         let mut port_ctrl_regs = self.read_port_ctrl_regs(port_num).unwrap();
+        port_ctrl_regs.cmd_list_base_addr_low = mbs_info[0].unwrap().mem_block_start_addr;
+        port_ctrl_regs.cmd_list_base_addr_high = 0;
 
-        if mb_info != None
-        {
-            port_ctrl_regs.cmd_list_base_addr_low = mb_info.unwrap().mem_block_start_addr;
-            port_ctrl_regs.cmd_list_base_addr_high = 0;
-
-            // allocate memory areas for command table
-            let mut mem_areas = [MemoryBlockInfo::new(); 16];
-            for i in 0..16
-            {
-                let mem_area = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
-
-                if mem_area == None
-                {
-                    log_error("Failed to initialize port memory spaces");
-                    self.unlock_port_cmd(port_num);
-                    return;
-                }
-
-                mem_areas[i] = mem_area.unwrap();
-            }
-
-            //set command headers
-            for i in 0..MAX_PORT_COUNT
-            {
-                let mut cmd_header = self.read_cmd_header(port_num, i as u32).unwrap();
-                cmd_header.set_phys_region_desc_table_len(8); // 8 ptrd entry per command table
-
-                let mut cmd_table_base_addr = mem_areas[i / 2].mem_block_start_addr;
-
-                if i % 2 != 0
-                {
-                    cmd_table_base_addr += MEM_BLOCK_SIZE / 2;
-                }
-
-                cmd_header.set_cmd_table_desc_base_addr_low(cmd_table_base_addr);
-                cmd_header.set_cmd_table_desc_base_addr_high(0);
-
-                self.write_cmd_header(port_num, i as u32, cmd_header);
-            }
-        }
-        else
-        {
-            self.unlock_port_cmd(port_num);
-            return;
-        }
-
-        // setup FIS struct memory area
-        let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block();
-        if mb_info != None
-        {
-            port_ctrl_regs.fis_base_addr_low = mb_info.unwrap().mem_block_start_addr;
-            port_ctrl_regs.fis_base_addr_high = 0;
-        }
-        else
-        {
-            println!("Failed to initialize port{} memory space", port_num);
-        }
+        port_ctrl_regs.fis_base_addr_low = mbs_info[1].unwrap().mem_block_start_addr;
+        port_ctrl_regs.fis_base_addr_high = 0;
 
         self.write_port_ctrl_regs(port_num, port_ctrl_regs);
+
+        for i in 0..32
+        {
+            if let (Some(mb_info), Some(mut cmd_header)) =
+                (PHYS_MEM_MANAGER.lock().alloc_single_mem_block(), self.read_cmd_header(port_num, i))
+            {
+                //PHYS_MEM_MANAGER.lock().clear_mem_block(&mb_info);
+                //println!("allocated mem block (0x{:x}~) to cmd_header{}", mb_info.mem_block_start_addr, i);
+
+                cmd_header.set_phys_region_desc_table_len(8);
+                cmd_header.set_cmd_table_desc_base_addr_low(mb_info.mem_block_start_addr);
+                cmd_header.set_cmd_table_desc_base_addr_high(0);
+                self.write_cmd_header(port_num, i, cmd_header);
+                println!("{:?}", self.read_cmd_header(port_num, i));
+                // TODO: cmd_header was overwritten or removed
+            }
+            else
+            {
+                self.unlock_port_cmd(port_num);
+                return Err("Failed to allocate memory block");
+            }
+        }
+
         self.unlock_port_cmd(port_num);
 
-        println!("[AHCI]: Port{} memory space initialized", port_num);
+        return Ok(());
     }
 
     fn lock_port_cmd(&self, port_num: usize)
