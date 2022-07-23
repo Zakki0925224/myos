@@ -41,25 +41,25 @@ pub fn init()
 
     if AHCI.lock().is_init()
     {
-        let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block().unwrap();
+        // let mb_info = PHYS_MEM_MANAGER.lock().alloc_single_mem_block().unwrap();
 
-        match AHCI.lock().read(0, 0, 0, mb_info.mem_block_start_addr, 8)
-        {
-            Ok(_) =>
-            {
-                println!("OK!");
+        // match AHCI.lock().read(0, 0, 0, mb_info.mem_block_start_addr, 8)
+        // {
+        //     Ok(_) =>
+        //     {
+        //         println!("OK!");
 
-                for i in 0..512
-                {
-                    unsafe
-                    {
-                        let ptr = (mb_info.mem_block_start_addr + i) as *const u8;
-                        println!("{:x}", read_volatile(ptr));
-                    }
-                }
-            }
-            Err(msg) => log_error(msg)
-        }
+        //         for i in 0..512
+        //         {
+        //             unsafe
+        //             {
+        //                 let ptr = (mb_info.mem_block_start_addr + i) as *const u8;
+        //                 println!("{:x}", read_volatile(ptr));
+        //             }
+        //         }
+        //     }
+        //     Err(msg) => log_error(msg)
+        // }
         // AHCI.lock().test();
 
         log_info("AHCI controller initialized");

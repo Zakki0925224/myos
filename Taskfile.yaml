@@ -3,7 +3,7 @@
 version: "3"
 
 vars:
-    PROJECT_NAME: "myos"
+    PROJECT_NAME: myos
 
     OUTPUT_DIR: build
     X86_DIR: x86
@@ -11,7 +11,8 @@ vars:
         kernel
         multiboot_header
         extfunc
-    FS_DIR: fs
+    FS_DIR: initramfs
+    INITRD_FILE: "{{$.PROJECT_NAME}}-initramfs.img"
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
     KERNEL_FILE: kernel.bin
@@ -57,21 +58,25 @@ tasks:
                 {{end -}}
                 {{$.LD}} {{range .X86_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
 
-    makefs:
+    makecpio:
         dir: "{{$.FS_DIR}}"
         cmds:
-            - dd if=/dev/zero of=../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} bs=1M count=128
-            - "mformat -i ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} :: -F"
-            - "find . -mindepth 1 -print | xargs -IX mcopy -i ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} -s X ::;"
+            - find . -depth -print | cpio -o > ../{{$.OUTPUT_DIR}}/{{$.FS_DIR}}
+
+    makeinitrd:
+        deps: [makecpio]
+        cmds:
+            - gzip -c {{$.OUTPUT_DIR}}/{{$.FS_DIR}} > {{$.OUTPUT_DIR}}/{{$.INITRD_FILE}}
+            - rm {{$.OUTPUT_DIR}}/{{$.FS_DIR}}
 
 
     build:
         cmds:
             - task: makeelf
-            - task: makefs
+            - task: makeinitrd
             - mkdir -p {{$.OUTPUT_DIR}}/isofiles/boot/grub
             - cp {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/
-            - cp {{$.OUTPUT_DIR}}/{{$.FS_FILE}} {{$.OUTPUT_DIR}}/isofiles/
+            - cp {{$.OUTPUT_DIR}}/{{$.INITRD_FILE}} {{$.OUTPUT_DIR}}/isofiles/
             - cp {{$.GRUB_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/grub/
             - grub-mkrescue -o {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} {{$.OUTPUT_DIR}}/isofiles 2> /dev/null
             - rm -r {{$.OUTPUT_DIR}}/isofiles
