@@ -1,4 +1,4 @@
-use core::ptr::{read_volatile, write_volatile};
+use core::{ptr::{read_volatile, write_volatile}, mem::size_of};
 
 use modular_bitfield::{bitfield, prelude::*};
 
@@ -21,16 +21,6 @@ const PORT_CMD_ST_MASK: u32 = 0x1;
 const PORT_CMD_FRE_MASK: u32 = 0x10;
 const PORT_CMD_FR_MASK: u32 = 0x4000;
 const PORT_CMD_CR_MASK: u32 = 0x8000;
-
-const FIS_H2D_REGS_SIZE: u8 = 20;
-const FIS_D2H_REGS_SIZE: u8 = 20;
-const PORT_CTRL_REGS_SIZE: u8 = 128;
-const PRDT_SIZE: u8 = 16;
-const CMD_TABLE_SIZE: u8 = 128 + PRDT_SIZE;
-const CMD_HEADER_SIZE: u8 = 28;
-
-const HBA_TO_PCR_OFFSET: u32 = 256;
-const CMD_TABLE_TO_PRDT_OFFSET: u32 = 128;
 
 const ATA_CMD_READ: u8 = 0x25;
 const ATA_CMD_WRITE: u8 = 0x35;
@@ -141,7 +131,7 @@ impl Ahci
         }
 
         let hba_base_addr = self.hba_base_addr;
-        let offset = HBA_TO_PCR_OFFSET + (PORT_CTRL_REGS_SIZE as u32) * port_num as u32;
+        let offset = (size_of::<HostBusAdapterMemoryRegisters>() + size_of::<PortControlRegisters>() * port_num) as u32;
 
         unsafe
         {
@@ -158,7 +148,7 @@ impl Ahci
         }
 
         let hba_base_addr = self.hba_base_addr;
-        let offset = HBA_TO_PCR_OFFSET + (PORT_CTRL_REGS_SIZE as u32) * port_num as u32;
+        let offset = (size_of::<HostBusAdapterMemoryRegisters>() + size_of::<PortControlRegisters>() * port_num) as u32;
 
         unsafe
         {
@@ -176,7 +166,7 @@ impl Ahci
             return None;
         }
 
-        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + CMD_HEADER_SIZE as u32 * header_index;
+        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + size_of::<CommandHeader>() as u32 * header_index;
 
         unsafe
         {
@@ -194,7 +184,7 @@ impl Ahci
             return;
         }
 
-        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + CMD_HEADER_SIZE as u32 * header_index;
+        let addr = port_ctrl_regs.unwrap().cmd_list_base_addr_low + size_of::<CommandHeader>() as u32 * header_index;
 
         unsafe
         {
@@ -216,7 +206,7 @@ impl Ahci
 
     fn read_init_cmd_table(&self, cmd_header: &CommandHeader) -> CommandTable
     {
-        PHYS_MEM_MANAGER.lock().memset(cmd_header.cmd_table_desc_base_addr_low(), CMD_TABLE_SIZE as u32 + (cmd_header.phys_region_desc_table_len() - 1) as u32 * PRDT_SIZE as u32, 0);
+        PHYS_MEM_MANAGER.lock().memset(cmd_header.cmd_table_desc_base_addr_low(), size_of::<CommandTable>() as u32 + (cmd_header.phys_region_desc_table_len() - 1) as u32 * size_of::<PhysicalRegionDescriptorTable>() as u32, 0);
 
         return self.read_cmd_table(cmd_header);
     }
@@ -234,7 +224,7 @@ impl Ahci
 
     fn read_prdt(&self, cmd_header: &CommandHeader, index: u16) -> PhysicalRegionDescriptorTable
     {
-        let base_addr = (cmd_header.cmd_table_desc_base_addr_low() + CMD_TABLE_TO_PRDT_OFFSET) + PRDT_SIZE as u32 * index as u32;
+        let base_addr = (cmd_header.cmd_table_desc_base_addr_low() + size_of::<CommandTable>() as u32) + size_of::<PhysicalRegionDescriptorTable>() as u32 * index as u32;
 
         unsafe
         {
@@ -245,7 +235,7 @@ impl Ahci
 
     fn write_prdt(&self, cmd_header: &CommandHeader, index: u16, prdt: PhysicalRegionDescriptorTable)
     {
-        let base_addr = (cmd_header.cmd_table_desc_base_addr_low() + CMD_TABLE_TO_PRDT_OFFSET) + PRDT_SIZE as u32 * index as u32;
+        let base_addr = (cmd_header.cmd_table_desc_base_addr_low() + size_of::<CommandTable>() as u32) + size_of::<PhysicalRegionDescriptorTable>() as u32 * index as u32;
 
         unsafe
         {
@@ -368,7 +358,7 @@ impl Ahci
             if let Some(slot) = self.find_cmd_slot(i)
             {
                 let cmd_header = self.read_cmd_header(i, slot).unwrap();
-                println!("port{}, cmd_slot: {}, ctba: 0x{:x}", i, slot, cmd_header.cmd_table_desc_base_addr_high());
+                println!("port{}, cmd_slot: {}, ctba: 0x{:x}", i, slot, cmd_header.cmd_table_desc_base_addr_low());
             }
         }
     }
@@ -392,7 +382,7 @@ impl Ahci
             println!("slot: {}", slot);
             let mut cmd_header = self.read_cmd_header(port_num, slot).unwrap();
 
-            cmd_header.set_cmd_fis_len(FIS_H2D_REGS_SIZE / 4);
+            cmd_header.set_cmd_fis_len((size_of::<FisHostToDeviceRegisters>() / size_of::<u32>()) as u8);
             cmd_header.set_write(0);
             cmd_header.set_phys_region_desc_table_len(((sector_cnt - 1) >> 4) + 1);
             println!("ctba: 0x{:x}, prdbc: {}, prdtl: {}", cmd_header.cmd_table_desc_base_addr_low(), cmd_header.phys_region_desc_byte_cnt(), cmd_header.phys_region_desc_table_len());
@@ -564,7 +554,7 @@ impl Ahci
         return ((self.read_hba_mem_regs().port_impl >> port_num) & 0x1) != 0;
     }
 
-    fn init_port_mem_space(&self, port_num: usize) -> Result<(), (&str)>
+    fn init_port_mem_space(&self, port_num: usize) -> Result<(), &str>
     {
         if !self.is_available_port_num(port_num)
         {
@@ -598,15 +588,12 @@ impl Ahci
             if let (Some(mb_info), Some(mut cmd_header)) =
                 (PHYS_MEM_MANAGER.lock().alloc_single_mem_block(), self.read_cmd_header(port_num, i))
             {
-                //PHYS_MEM_MANAGER.lock().clear_mem_block(&mb_info);
                 //println!("allocated mem block (0x{:x}~) to cmd_header{}", mb_info.mem_block_start_addr, i);
 
                 cmd_header.set_phys_region_desc_table_len(8);
                 cmd_header.set_cmd_table_desc_base_addr_low(mb_info.mem_block_start_addr);
                 cmd_header.set_cmd_table_desc_base_addr_high(0);
                 self.write_cmd_header(port_num, i, cmd_header);
-                println!("{:?}", self.read_cmd_header(port_num, i));
-                // TODO: cmd_header was overwritten or removed
             }
             else
             {

@@ -3,6 +3,7 @@
 #![feature(asm)]
 #![feature(start)]
 #![feature(core_intrinsics)]
+#![feature(alloc_error_handler)]
 // #![feature(custom_test_frameworks)]
 // #![test_runner(crate::test_runner)]
 // #![reexport_test_harness_main = "test_main"]
@@ -15,7 +16,10 @@ mod meta;
 mod mem;
 mod util;
 
+extern crate alloc;
+
 use core::panic::PanicInfo;
+use alloc::{boxed::Box, vec};
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
@@ -91,6 +95,12 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
             asm::hlt();
         }
     }
+}
+
+#[alloc_error_handler]
+fn alloc_error_handler(layout: alloc::alloc::Layout) -> !
+{
+    panic!("allocation error: {:?}", layout);
 }
 
 #[panic_handler]

@@ -2,6 +2,8 @@ use core::ptr::{write_volatile, read_volatile};
 use multiboot2::{BootInformation, MemoryAreaType};
 use crate::{println, util::{boot_info::*, logger::*}, mem};
 
+use super::allocator::{HEAP_AREA_BASE_ADDR, HEAP_SIZE};
+
 pub const MEM_BLOCK_SIZE: u32 = 4096;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -128,6 +130,15 @@ impl PhysicalMemoryManager
                 self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
             }
         }
+
+        // set allocate heap area blocks
+        for i in HEAP_AREA_BASE_ADDR..HEAP_AREA_BASE_ADDR + HEAP_SIZE
+        {
+            if i % MEM_BLOCK_SIZE == 0
+            {
+                self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
+            }
+        }
     }
 
     pub fn get_mem_block(&mut self, index: usize) -> Option<MemoryBlockInfo>
@@ -225,6 +236,7 @@ impl PhysicalMemoryManager
         }
     }
 
+    // FIXME: this function has no end (but, throw no exception)
     pub fn clear_mem_block(&self, mem_block: &MemoryBlockInfo)
     {
         //println!("Clearing memory block 0x{:x} - 0x{:x}...", mem_block.mem_block_start_addr, mem_block.mem_block_start_addr + mem_block.mem_block_size);

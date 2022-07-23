@@ -9,6 +9,7 @@ use self::phys_mem::PhysicalMemoryManager;
 pub mod phys_mem;
 pub mod virt_mem;
 pub mod paging;
+pub mod allocator;
 
 lazy_static!
 {
