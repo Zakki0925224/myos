@@ -1,3 +1,4 @@
+use crate::mem::phys_mem::MEM_BLOCK_SIZE;
 use crate::{println, util::logger::*, mem::paging::Paging};
 use multiboot2::BootInformation;
 use lazy_static::lazy_static;
@@ -39,4 +40,14 @@ pub fn free()
     println!("Total: {}B", PHYS_MEM_MANAGER.lock().get_total_mem_size());
     println!("Used: {}B", PHYS_MEM_MANAGER.lock().get_used_mem_size());
     println!("Free: {}B", PHYS_MEM_MANAGER.lock().get_free_mem_size());
+}
+
+pub fn info()
+{
+    println!("Memory block size: {}B", MEM_BLOCK_SIZE);
+
+    let allocated = PHYS_MEM_MANAGER.lock().get_allocated_blocks();
+    let total = PHYS_MEM_MANAGER.lock().get_mem_blocks();
+
+    println!("Allocated: {} / {}", allocated, total);
 }

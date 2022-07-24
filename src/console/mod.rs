@@ -97,6 +97,7 @@ impl SystemConsole
             "lspci" => self.do_process(|| PCI.lock().lspci()),
             "iahci" => self.do_process(|| AHCI.lock().ahci_info()),
             "mfree" => self.do_process(|| mem::free()),
+            "minfo" => self.do_process(|| mem::info()),
             "kmeta" => self.do_process(|| meta::print_info()),
             "clear" => self.do_process(|| VGA_SCREEN.lock().cls()),
             "itest" => self.do_process(|| asm::test()),

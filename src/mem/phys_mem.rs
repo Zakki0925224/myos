@@ -127,7 +127,13 @@ impl PhysicalMemoryManager
         {
             if i % MEM_BLOCK_SIZE == 0
             {
-                self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
+                let mb_index = self.get_mem_block_index_from_phys_addr(i);
+                if !self.is_allocated_mem_block(mb_index)
+                {
+                    self.allocate_mem_block(mb_index);
+                    self.allocated_blocks += 1;
+                    self.free_blocks -= 1;
+                }
             }
         }
 
@@ -136,7 +142,28 @@ impl PhysicalMemoryManager
         {
             if i % MEM_BLOCK_SIZE == 0
             {
-                self.allocate_mem_block(self.get_mem_block_index_from_phys_addr(i) as usize);
+                let mb_index = self.get_mem_block_index_from_phys_addr(i);
+                if !self.is_allocated_mem_block(mb_index)
+                {
+                    self.allocate_mem_block(mb_index);
+                    self.allocated_blocks += 1;
+                    self.free_blocks -= 1;
+                }
+            }
+        }
+
+        // set allocate module area blocks
+        for tag in get_module_tags(boot_info)
+        {
+            for i in tag.start_address()..tag.end_address()
+            {
+                let mb_index = self.get_mem_block_index_from_phys_addr(i);
+                if !self.is_allocated_mem_block(mb_index)
+                {
+                    self.allocate_mem_block(mb_index);
+                    self.allocated_blocks += 1;
+                    self.free_blocks -= 1;
+                }
             }
         }
     }
