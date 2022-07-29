@@ -12,18 +12,19 @@ mod arch;
 mod console;
 mod data;
 mod device;
+mod fs;
 mod meta;
 mod mem;
 mod util;
 
 extern crate alloc;
 
-use core::panic::PanicInfo;
+use core::{panic::PanicInfo, ptr::read_volatile};
 use alloc::{boxed::Box, vec};
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING, fs::ramfs::Ramfs};
 
 #[no_mangle]
 #[start]
@@ -56,10 +57,9 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
 
-    for i in get_module_tags(&boot_info)
-    {
-        println!("{:?}", i);
-    }
+    let module = get_module_tags(&boot_info).last().unwrap();
+    let ramfs = Ramfs::new(module.start_address(), module.end_address(), module.module_size());
+    ramfs.test();
 
     let mut console = SystemConsole::new();
     console.start();

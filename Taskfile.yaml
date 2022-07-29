@@ -61,7 +61,7 @@ tasks:
     makecpio:
         dir: "{{$.FS_DIR}}"
         cmds:
-            - find . -depth -print | cpio -o > ../{{$.OUTPUT_DIR}}/{{$.FS_DIR}}
+            - find . -depth -print | cpio -o > ../{{$.OUTPUT_DIR}}/{{$.FS_DIR}} --format=newc
 
     makeinitrd:
         deps: [makecpio]

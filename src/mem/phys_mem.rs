@@ -73,11 +73,29 @@ impl PhysicalMemoryManager
         self.mem_blocks = self.total_mem_size / MEM_BLOCK_SIZE;
         self.allocated_blocks = self.mem_blocks;
         self.free_blocks = 0;
-        let (_, e) = get_multiboot_addr(boot_info);
-        self.memmap_addr = (e + 1) as u32;
         self.memmap_size = self.mem_blocks / u32::BITS * 4; // memmap size (byte)
 
-        let all_mem_areas = get_all_mem_areas(boot_info);
+        for area in get_all_mem_areas(boot_info)
+        {
+            if area.typ() == MemoryAreaType::Available
+            {
+                self.memmap_addr = area.start_address() as u32;
+
+                // allocate memory blocks
+                for i in self.memmap_addr..self.memmap_addr + self.memmap_size
+                {
+                    if i % MEM_BLOCK_SIZE == 0
+                    {
+                        let mb_index = self.get_mem_block_index_from_phys_addr(i);
+                        if !self.is_allocated_mem_block(mb_index)
+                        {
+                            self.allocate_mem_block(mb_index);
+                            self.allocated_blocks += 1;
+                        }
+                    }
+                }
+            }
+        }
 
         // set all blocks to allocated
         for i in 0..self.mem_blocks
@@ -89,7 +107,7 @@ impl PhysicalMemoryManager
         let mut mb_index = 0;
         let mut tmp = 0;
 
-        for area in all_mem_areas
+        for area in get_all_mem_areas(boot_info)
         {
             let mut i = area.start_address() as u32 + tmp;
 
@@ -122,8 +140,9 @@ impl PhysicalMemoryManager
             }
         }
 
-        // set reallocate blocks (0 ~ mmap addr + mmap size)
-        for i in 0..self.memmap_addr + self.memmap_size
+        // set reallocate blocks
+        let (_, e) = get_multiboot_addr(boot_info);
+        for i in 0..e as u32
         {
             if i % MEM_BLOCK_SIZE == 0
             {
@@ -141,21 +160,6 @@ impl PhysicalMemoryManager
         for i in HEAP_AREA_BASE_ADDR..HEAP_AREA_BASE_ADDR + HEAP_SIZE
         {
             if i % MEM_BLOCK_SIZE == 0
-            {
-                let mb_index = self.get_mem_block_index_from_phys_addr(i);
-                if !self.is_allocated_mem_block(mb_index)
-                {
-                    self.allocate_mem_block(mb_index);
-                    self.allocated_blocks += 1;
-                    self.free_blocks -= 1;
-                }
-            }
-        }
-
-        // set allocate module area blocks
-        for tag in get_module_tags(boot_info)
-        {
-            for i in tag.start_address()..tag.end_address()
             {
                 let mb_index = self.get_mem_block_index_from_phys_addr(i);
                 if !self.is_allocated_mem_block(mb_index)
