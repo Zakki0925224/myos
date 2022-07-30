@@ -24,7 +24,7 @@ use alloc::{boxed::Box, vec};
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING, fs::ramfs::Ramfs};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING};
 
 #[no_mangle]
 #[start]
@@ -58,8 +58,7 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
     let mut keyboard = Keyboard::new(KeyLayout::AnsiUs104);
 
     let module = get_module_tags(&boot_info).last().unwrap();
-    let ramfs = Ramfs::new(module.start_address(), module.end_address(), module.module_size());
-    ramfs.test();
+    println!("{:?}", module);
 
     let mut console = SystemConsole::new();
     console.start();

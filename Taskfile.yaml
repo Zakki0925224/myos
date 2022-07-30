@@ -11,8 +11,7 @@ vars:
         kernel
         multiboot_header
         extfunc
-    FS_DIR: initramfs
-    INITRD_FILE: "{{$.PROJECT_NAME}}-initramfs.img"
+    FS_DIR: fs
 
     RUST_CODE_FILE: target/i686-{{$.PROJECT_NAME}}/debug/lib{{$.PROJECT_NAME}}.a
     KERNEL_FILE: kernel.bin
@@ -58,25 +57,25 @@ tasks:
                 {{end -}}
                 {{$.LD}} {{range .X86_DIR_FILES | splitLines -}}{{if .}}{{$.OUTPUT_DIR}}/{{.}}{{$.OBJ_EX}}{{end}} {{end -}}{{$.RUST_CODE_FILE}}
 
-    makecpio:
+    makefs:
         dir: "{{$.FS_DIR}}"
         cmds:
-            - find . -depth -print | cpio -o > ../{{$.OUTPUT_DIR}}/{{$.FS_DIR}} --format=newc
-
-    makeinitrd:
-        deps: [makecpio]
-        cmds:
-            - gzip -c {{$.OUTPUT_DIR}}/{{$.FS_DIR}} > {{$.OUTPUT_DIR}}/{{$.INITRD_FILE}}
-            - rm {{$.OUTPUT_DIR}}/{{$.FS_DIR}}
+            - dd if=/dev/zero of=../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} bs=1M count=1 # file size: 1MB
+            - sudo mkfs.vfat -v -c -F 32 ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} # format for FAT32
+            - sudo losetup /dev/loop0 ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}}
+            - sudo mount /dev/loop0 /mnt
+            - find . -type f -exec sudo cp --parents {} /mnt \;
+            - sudo umount /mnt
+            - sudo losetup -d /dev/loop0
 
 
     build:
         cmds:
             - task: makeelf
-            - task: makeinitrd
+            - task: makefs
             - mkdir -p {{$.OUTPUT_DIR}}/isofiles/boot/grub
             - cp {{$.OUTPUT_DIR}}/{{$.KERNEL_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/
-            - cp {{$.OUTPUT_DIR}}/{{$.INITRD_FILE}} {{$.OUTPUT_DIR}}/isofiles/
+            - cp {{$.OUTPUT_DIR}}/{{$.FS_FILE}} {{$.OUTPUT_DIR}}/isofiles/
             - cp {{$.GRUB_FILE}} {{$.OUTPUT_DIR}}/isofiles/boot/grub/
             - grub-mkrescue -o {{$.OUTPUT_DIR}}/{{$.OS_IMAGE_FILE}} {{$.OUTPUT_DIR}}/isofiles 2> /dev/null
             - rm -r {{$.OUTPUT_DIR}}/isofiles

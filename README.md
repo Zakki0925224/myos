@@ -3,8 +3,6 @@ GRUBを使ったrust製自作OS
 ## Used tools
 * cargo
 * cargo-xbuild
-* dd
-* find
 * go-task
 * grub
 * ld
@@ -13,7 +11,6 @@ GRUBを使ったrust製自作OS
 * qemu
 * qemu-arch-extra
 * rust (nightly)
-* xargs
 * xorriso
 
 ## Features
