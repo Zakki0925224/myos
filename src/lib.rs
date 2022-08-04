@@ -19,12 +19,11 @@ mod util;
 
 extern crate alloc;
 
-use core::{panic::PanicInfo, ptr::read_volatile};
-use alloc::{boxed::Box, vec};
+use core::panic::PanicInfo;
 use arch::{vga::{VGA_SCREEN, Color}, asm, sgm};
 use multiboot2::{self, BootInformation};
 
-use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING};
+use crate::{arch::int::{self, KEYBUF, MOUSEBUF}, device::keyboard::{Keyboard, KeyLayout}, util::{boot_info::*, logger::*}, console::{SystemConsole, ascii}, mem::PAGING, fs::fat::Fat};
 
 #[no_mangle]
 #[start]
@@ -59,6 +58,8 @@ pub extern "C" fn kernel_main(magic: u32, boot_info_addr: u32) -> !
 
     let module = get_module_tags(&boot_info).last().unwrap();
     println!("{:?}", module);
+    let fat = Fat::new(module.start_address(), module.end_address());
+    fat.test();
 
     let mut console = SystemConsole::new();
     console.start();

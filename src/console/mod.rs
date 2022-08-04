@@ -76,10 +76,14 @@ impl SystemConsole
 
     fn wait_input(&mut self)
     {
+        self.is_waiting_input = true;
         print!("\n");
         print!("# ");
-        self.input_buf.clear();
-        self.is_waiting_input = true;
+
+        if self.input_buf.len() != 0
+        {
+            self.input_buf.clear();
+        }
     }
 
     fn parse_input(&mut self)
