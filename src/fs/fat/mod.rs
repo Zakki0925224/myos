@@ -38,14 +38,29 @@ impl Fat
                 println!("{:?}", fis);
             }
 
-            // for i in 0..5
-            // {
-            //     let de = read_volatile((self.start_base_addr + bs.get_sector_size() as u32 * (bs.root_dir_start_sector_num() + i) as u32) as *const DirectoryEntry);
-            //     println!("{:?}", de);
-            //     println!("File short name: {}", de.get_file_short_name());
-            //     println!("File extension: {}", de.get_file_ex());
-            //     println!("File attribute: {:?}", de.get_file_attr());
-            // }
+            println!("data area start sector num: {}", bs.data_area_start_sector_num());
+            println!("data area sectors cnt: {}", bs.data_area_sectors_cnt());
+
+            let mut cnt = 0;
+
+            for i in 0../*bs.data_area_sectors_cnt()*/10
+            {
+                let de = read_volatile((self.start_base_addr + bs.get_sector_size() as u32 * (bs.data_area_start_sector_num() + i) as u32) as *const DirectoryEntry);
+                let file_attr = de.get_file_attr();
+
+                // if file_attr == None
+                // {
+                //     continue;
+                // }
+
+                println!("{:?}", de);
+                println!("File short name: {}", de.get_file_short_name());
+                println!("File attribute: {:?}", file_attr);
+
+                cnt += 1;
+            }
+
+            println!("got {} available data", cnt);
         }
     }
 }

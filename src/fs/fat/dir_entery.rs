@@ -1,7 +1,7 @@
 use alloc::{string::String, vec::Vec};
 use modular_bitfield::{bitfield, prelude::*};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FileAttribute
 {
@@ -9,6 +9,7 @@ pub enum FileAttribute
     Hidden      = 0x02,
     System      = 0x04,
     VolumeLabel = 0x08,
+    LongName    = 0x0f,
     Directory   = 0x10,
     Archive     = 0x20,
     Device      = 0x40
@@ -19,8 +20,7 @@ pub enum FileAttribute
 #[repr(C)]
 pub struct DirectoryEntry
 {
-    file_short_name: B64,
-    file_ex: B24,
+    file_short_name: B88,
     file_attr: B8,
     win_nt_reserved: B8,
     create_time_ms: B8,
@@ -40,21 +40,9 @@ impl DirectoryEntry
     {
         let mut str_buf = Vec::new();
 
-        for i in 0..8
+        for i in 0..11
         {
             str_buf.push((self.file_short_name() >> 8 * i) as u8 as char);
-        }
-
-        return str_buf.iter().collect();
-    }
-
-    pub fn get_file_ex(&self) -> String
-    {
-        let mut str_buf = Vec::new();
-
-        for i in 0..3
-        {
-            str_buf.push((self.file_ex() >> 8 * i) as u8 as char);
         }
 
         return str_buf.iter().collect();
@@ -68,6 +56,7 @@ impl DirectoryEntry
             0x02 => return Some(FileAttribute::Hidden),
             0x04 => return Some(FileAttribute::System),
             0x08 => return Some(FileAttribute::VolumeLabel),
+            0x0f => return Some(FileAttribute::LongName),
             0x10 => return Some(FileAttribute::Directory),
             0x20 => return Some(FileAttribute::Archive),
             0x40 => return Some(FileAttribute::Device),
