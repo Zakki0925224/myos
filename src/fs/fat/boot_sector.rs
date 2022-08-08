@@ -1,3 +1,4 @@
+use core::ptr::read_volatile;
 use alloc::{string::String, vec::Vec};
 use modular_bitfield::{bitfield, prelude::*};
 
@@ -68,6 +69,11 @@ pub struct BootSector
 
 impl BootSector
 {
+    pub fn read(base_addr: u32) -> BootSector
+    {
+        return unsafe { read_volatile(base_addr as *const BootSector) };
+    }
+
     pub fn get_oem_name(&self) -> String
     {
         let mut char_buf = Vec::new();

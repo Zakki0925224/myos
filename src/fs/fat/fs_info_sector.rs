@@ -1,3 +1,5 @@
+use core::ptr::read_volatile;
+
 use alloc::{string::String, vec::Vec};
 
 #[derive(Debug)]
@@ -18,6 +20,11 @@ pub struct FsInfoSector
 
 impl FsInfoSector
 {
+    pub fn read(base_addr: u32) -> FsInfoSector
+    {
+        return unsafe { read_volatile(base_addr as *const FsInfoSector) };
+    }
+
     pub fn get_signatures(&self) -> [u32; 3]
     {
         return [self.signature1, self.signature2, self.signature3];

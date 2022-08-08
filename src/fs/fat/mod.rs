@@ -1,66 +1,149 @@
 use core::{ptr::read_volatile, mem::size_of};
-use crate::{print, println, fs::fat::{fs_info_sector::FsInfoSector, dir_entery::DirectoryEntry, boot_sector::FATType}};
 
-use self::boot_sector::BootSector;
+use alloc::{vec::Vec, string::{String, ToString}};
 
-mod boot_sector;
-mod fs_info_sector;
-mod dir_entery;
+use crate::{print, println, fs::fat::{fs_info_sector::FsInfoSector, dir_entery::{DirectoryEntry, FileAttribute, EntryType}, boot_sector::FATType}};
 
-pub struct Fat
+use self::{boot_sector::BootSector, file_allocation_table::ClusterType, dir_entery::LongFileNameEntry};
+
+pub mod boot_sector;
+pub mod fs_info_sector;
+pub mod dir_entery;
+pub mod file_allocation_table;
+
+pub struct FatVolume
 {
     start_base_addr: u32,
-    end_base_addr: u32
+    end_base_addr: u32,
+    boot_sector: BootSector,
+    is_init: bool
 }
 
-impl Fat
+impl FatVolume
 {
-    pub fn new(start_base_addr: u32, end_base_addr: u32) -> Fat
+    pub fn new(start_base_addr: u32, end_base_addr: u32) -> FatVolume
     {
-        return Fat { start_base_addr, end_base_addr };
+        return FatVolume
+        {
+            start_base_addr,
+            end_base_addr,
+            boot_sector: BootSector::new(),
+            is_init: false
+        };
     }
 
-    pub fn test(&self)
+    pub fn init(&mut self)
     {
-        unsafe
+        let bs = BootSector::read(self.start_base_addr);
+
+        if bs.get_volume_id() != 0
         {
-            let bs = read_volatile(self.start_base_addr as *const BootSector);
-            println!("{:?}", bs);
-            println!("OEM name: \"{}\"", bs.get_oem_name());
-            println!("Volume label: \"{}\"", bs.get_volume_label());
-            println!("Volume id: 0x{:x}", bs.get_volume_id());
-            println!("FS type name: \"{}\"", bs.get_fs_type_name());
-            println!("FAT type: {:?}", bs.fat_type());
+            self.is_init = true;
+        }
 
-            if bs.fat_type() == FATType::FAT32
-            {
-                let fis = read_volatile((self.start_base_addr + (bs.get_fat32_fs_info_sector_num() * bs.get_sector_size()) as u32) as *const FsInfoSector);
-                println!("{:?}", fis);
-            }
+        self.boot_sector = bs;
+    }
 
-            println!("data area start sector num: {}", bs.data_area_start_sector_num());
-            println!("data area sectors cnt: {}", bs.data_area_sectors_cnt());
+    pub fn is_init(&self) -> bool
+    {
+        return self.is_init;
+    }
 
-            let mut cnt = 0;
+    pub fn get_fat_type(&self) -> FATType
+    {
+        return self.boot_sector.fat_type();
+    }
 
-            for i in 0../*bs.data_area_sectors_cnt()*/10
-            {
-                let de = read_volatile((self.start_base_addr + bs.get_sector_size() as u32 * (bs.data_area_start_sector_num() + i) as u32) as *const DirectoryEntry);
-                let file_attr = de.get_file_attr();
+    pub fn get_dir_entries_per_cluster(&self) -> usize
+    {
+        return self.boot_sector.get_cluster_size() * self.boot_sector.get_sector_size() / size_of::<DirectoryEntry>();
+    }
 
-                // if file_attr == None
-                // {
-                //     continue;
-                // }
+    pub fn get_dir_entries_max_num(&self) -> usize
+    {
+        let cluster_num = self.boot_sector.data_area_sectors_cnt() / self.boot_sector.get_cluster_size();
+        return cluster_num * self.get_dir_entries_per_cluster();
+    }
 
-                println!("{:?}", de);
-                println!("File short name: {}", de.get_file_short_name());
-                println!("File attribute: {:?}", file_attr);
+    pub fn get_cluster_num_from_dir_entry_num(&self, dir_entry_num: usize) -> usize
+    {
+        return dir_entry_num / self.get_dir_entries_per_cluster();
+    }
 
-                cnt += 1;
-            }
+    pub fn get_fs_info_sector(&self) -> Option<FsInfoSector>
+    {
+        if self.boot_sector.fat_type() != FATType::FAT32
+        {
+            return None;
+        }
 
-            println!("got {} available data", cnt);
+        let base_addr = self.start_base_addr + (self.boot_sector.get_fat32_fs_info_sector_num() * self.boot_sector.get_sector_size()) as u32;
+        return Some(FsInfoSector::read(base_addr));
+    }
+
+    pub fn get_root_dir_entry(&self) -> DirectoryEntry
+    {
+        if self.get_fat_type() == FATType::FAT32
+        {
+            let entries_per_cluster = self.get_dir_entries_per_cluster();
+            let entry_num = (self.boot_sector.get_fat32_root_dir_cluster_num() - 2) * entries_per_cluster;
+            return self.get_dir_entry(entry_num).unwrap();
+        }
+
+        let base_addr = self.start_base_addr + (self.boot_sector.root_dir_area_start_sector_num() * self.boot_sector.get_sector_size()) as u32;
+        return DirectoryEntry::read(base_addr);
+    }
+
+    pub fn get_dir_entry(&self, entry_num: usize) -> Option<DirectoryEntry>
+    {
+        if entry_num > self.get_dir_entries_max_num()
+        {
+            return None;
+        }
+
+        let entries_per_cluster = self.get_dir_entries_per_cluster();
+
+        let data_area_start_offset = self.boot_sector.data_area_start_sector_num() * self.boot_sector.get_sector_size();
+        let offset = data_area_start_offset + (entry_num * size_of::<DirectoryEntry>());
+        let base_addr = self.start_base_addr + offset as u32;
+
+        return Some(DirectoryEntry::read(base_addr));
+    }
+
+    pub fn get_long_file_name_entry(&self, entry_num: usize) -> Option<LongFileNameEntry>
+    {
+        if entry_num > self.get_dir_entries_max_num()
+        {
+            return None;
+        }
+
+        let entries_per_cluster = self.get_dir_entries_per_cluster();
+
+        let data_area_start_offset = self.boot_sector.data_area_start_sector_num() * self.boot_sector.get_sector_size();
+        let offset = data_area_start_offset + (entry_num * size_of::<DirectoryEntry>());
+        let base_addr = self.start_base_addr + offset as u32;
+        let entry = LongFileNameEntry::read(base_addr);
+
+        match entry.is_valid_entry()
+        {
+            true => return Some(entry),
+            false => return None,
         }
     }
+
+    pub fn get_next_cluster(&self, cluster_num: usize) -> Option<ClusterType>
+    {
+        let fat_clusters_cnt = self.boot_sector.fat_area_sectors_cnt() / self.boot_sector.get_cluster_size();
+
+        if fat_clusters_cnt < cluster_num
+        {
+            return None;
+        }
+
+        let fat_start_sector = self.boot_sector.fat_area_start_sector_num();
+        let fat_start_base_addr = self.start_base_addr + (fat_start_sector * self.boot_sector.get_sector_size()) as u32;
+        return Some(file_allocation_table::get_next_cluster_num(fat_start_base_addr, self.get_fat_type(), cluster_num));
+    }
+
+    //pub fn read_file()
 }
