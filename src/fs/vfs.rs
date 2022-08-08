@@ -55,7 +55,7 @@ impl VirtualFileSystem
         let dir_entries_per_cluster = self.fat_volume.get_dir_entries_per_cluster();
         let mut long_file_name_buf = [LFN_EMPTY_CHAR; LFN_MAX];
         let mut buf_cnt = LFN_MAX - 1;
-        while i < dir_entries_per_cluster
+        while i < self.fat_volume.get_dir_entries_max_num()
         {
             let de = self.fat_volume.get_dir_entry(i).unwrap();
             let entry_type = de.entry_type();
@@ -78,6 +78,11 @@ impl VirtualFileSystem
                     long_file_name_buf[buf_cnt] = file_name[i];
 
                     buf_cnt -= 1;
+
+                    if buf_cnt == 0
+                    {
+                        break;
+                    }
                 }
 
                 i += 1;
@@ -97,12 +102,17 @@ impl VirtualFileSystem
                     }
                 }
 
-                println!("{} ({:?})", str_buf, file_attr.unwrap());
                 long_file_name_buf = [LFN_EMPTY_CHAR; LFN_MAX];
                 buf_cnt = LFN_MAX - 1;
-            }
 
-            //println!("({}/{}){:?} - {:?} - \"{}\"", i + 1, dir_entries_per_cluster, entry_type, file_attr, de.get_file_short_name());
+                if str_buf == ""
+                {
+                    i += 1;
+                    continue;
+                }
+
+                println!("[{}/{}]{} ({:?})", i, self.fat_volume.get_dir_entries_max_num(), str_buf, file_attr.unwrap());
+            }
 
             i += 1;
         }
