@@ -1,7 +1,10 @@
 use core::{ptr::read_volatile, char::{decode_utf16, REPLACEMENT_CHARACTER}};
 
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec::Vec};
 use modular_bitfield::{bitfield, prelude::*};
+
+pub const CURRENT_DIR_FILE_NAME: &str = ".          ";
+pub const PARENT_DIR_FILE_NAME: &str = "..         ";
 
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -27,7 +30,7 @@ pub enum EntryType
 }
 
 #[bitfield]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct DirectoryEntry
 {
@@ -78,6 +81,14 @@ impl DirectoryEntry
             0x40 => return Some(FileAttribute::Device),
             _ => return None
         }
+    }
+
+    pub fn get_first_cluster_num(&self) -> usize
+    {
+        let low = self.first_cluster_num_low() as usize;
+        let high = (self.first_cluster_num_high() as usize) << 16;
+
+        return high | low;
     }
 
     pub fn entry_type(&self) -> EntryType

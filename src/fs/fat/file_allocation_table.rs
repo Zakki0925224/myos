@@ -13,6 +13,32 @@ pub enum ClusterType
     Other(usize) // TODO: remove after
 }
 
+pub fn get_first_cluster_chain_from_cluster_name(fat_start_base_addr: u32, fat_type: FATType, cluster_num: usize) -> usize
+{
+    let mut first_cluster_num = cluster_num;
+
+    for i in (0..cluster_num).rev()
+    {
+        let next_cluster_num = get_next_cluster_num(fat_start_base_addr, fat_type, i);
+
+        if i == cluster_num
+        {
+            if let ClusterType::EndOfChain(_) = next_cluster_num
+            {
+                return first_cluster_num;
+            }
+        }
+        else if let ClusterType::EndOfChain(_) = next_cluster_num
+        {
+            break;
+        }
+
+        first_cluster_num = i;
+    }
+
+    return first_cluster_num;
+}
+
 pub fn get_next_cluster_num(fat_start_base_addr: u32, fat_type: FATType, cluster_num: usize) -> ClusterType
 {
     match fat_type

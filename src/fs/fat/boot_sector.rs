@@ -4,7 +4,7 @@ use modular_bitfield::{bitfield, prelude::*};
 
 use crate::println;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FATType
 {
     FAT12,

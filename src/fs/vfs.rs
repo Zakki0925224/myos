@@ -6,8 +6,7 @@ use crate::{util::logger::{log_info, log_warn}, println, fs::fat::{file_allocati
 
 use super::fat::{FatVolume, dir_entery::EntryType};
 
-const LFN_MAX: usize = 255;
-const LFN_EMPTY_CHAR: char = '?';
+const PATH_SEPARATOR: &str = "/";
 
 lazy_static!
 {
@@ -44,6 +43,47 @@ impl VirtualFileSystem
         }
     }
 
+    fn get_full_path(&self, dir_entry_num: usize) -> Option<String>
+    {
+        if !self.is_init
+        {
+            return None;
+        }
+
+        if let Some(file_name) = self.fat_volume.get_file_name_from_dir_entry_num(dir_entry_num)
+        {
+            let cluster_num = self.fat_volume.get_cluster_num_from_dir_entry_num(dir_entry_num);
+            let root_dir_cluster_num = self.fat_volume.get_root_dir_cluster_num();
+            let dirs_dir_entry = self.fat_volume.get_dirs_dir_entry(dir_entry_num);
+
+            if root_dir_cluster_num == None
+            {
+                return None;
+            }
+
+            if cluster_num == root_dir_cluster_num.unwrap()
+            {
+                let mut str_buf = String::from(PATH_SEPARATOR);
+                //println!("file name: {:p} \"{}\"", file_name.as_ptr(), file_name);
+                //println!("str buf: {:p} \"{}\"", str_buf.as_ptr(), str_buf);
+                str_buf += file_name.as_str();
+
+                return Some(str_buf);
+            }
+            else
+            {
+                if let Some((_, parent)) = dirs_dir_entry
+                {
+                    let name = self.fat_volume.get_file_name_from_dir_entry_num(parent.get_first_cluster_num());
+                    println!("parent: {:?}", name);
+                }
+            }
+        }
+
+        return None;
+    }
+
+    // fat32 only
     pub fn ls(&self)
     {
         if !self.is_init
@@ -52,11 +92,32 @@ impl VirtualFileSystem
         }
 
         let mut i = 0;
-        let dir_entries_per_cluster = self.fat_volume.get_dir_entries_per_cluster();
-        let mut long_file_name_buf = [LFN_EMPTY_CHAR; LFN_MAX];
-        let mut buf_cnt = LFN_MAX - 1;
         while i < self.fat_volume.get_dir_entries_max_num()
         {
+            let cluster_num = self.fat_volume.get_cluster_num_from_dir_entry_num(i);
+            // skip this cluster?
+            if i % self.fat_volume.get_dir_entries_per_cluster() == 0
+            {
+                if let Some(next_cluster) = self.fat_volume.get_next_cluster(cluster_num)
+                {
+                    match next_cluster
+                    {
+                        ClusterType::Data(_) => (),
+                        ClusterType::EndOfChain(_) => (),
+                        _ =>
+                        {
+                            i += self.fat_volume.get_dir_entries_per_cluster();
+                            continue;
+                        }
+                    }
+                }
+                else
+                {
+                    i += self.fat_volume.get_dir_entries_per_cluster();
+                    continue;
+                }
+            }
+
             let de = self.fat_volume.get_dir_entry(i).unwrap();
             let entry_type = de.entry_type();
             let file_attr = de.get_file_attr();
@@ -68,50 +129,14 @@ impl VirtualFileSystem
                 continue;
             }
 
-            if file_attr == Some(FileAttribute::LongFileName)
+            if let Some(path) = self.get_full_path(i)
             {
-                let lfn_entry = self.fat_volume.get_long_file_name_entry(i).unwrap();
-                let file_name: Vec<char> = lfn_entry.get_file_name().chars().collect();
-
-                for i in (0..file_name.len()).rev()
-                {
-                    long_file_name_buf[buf_cnt] = file_name[i];
-
-                    buf_cnt -= 1;
-
-                    if buf_cnt == 0
-                    {
-                        break;
-                    }
-                }
-
-                i += 1;
-                continue;
+                println!("path: \"{}\"", path);
             }
-            else if (file_attr == Some(FileAttribute::Archive) ||
-                    file_attr == Some(FileAttribute::Directory)) &&
-                    buf_cnt != 0
+
+            if let Some(file_name) = self.fat_volume.get_file_name_from_dir_entry_num(i)
             {
-                let mut str_buf = String::new();
-
-                for i in 0..LFN_MAX
-                {
-                    if long_file_name_buf[i] != LFN_EMPTY_CHAR
-                    {
-                        str_buf.push(long_file_name_buf[i]);
-                    }
-                }
-
-                long_file_name_buf = [LFN_EMPTY_CHAR; LFN_MAX];
-                buf_cnt = LFN_MAX - 1;
-
-                if str_buf == ""
-                {
-                    i += 1;
-                    continue;
-                }
-
-                println!("[{}/{}]{} ({:?})", i, self.fat_volume.get_dir_entries_max_num(), str_buf, file_attr.unwrap());
+                println!("{}(cn: {})", file_name, cluster_num);
             }
 
             i += 1;
