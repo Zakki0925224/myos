@@ -17,7 +17,7 @@ pub struct VirtualFileSystem
 {
     fat_volume: FatVolume,
     is_init: bool,
-    dir_cluster_list: Vec<(usize, String)>
+    current_dir_cluster_num: usize
 }
 
 impl VirtualFileSystem
@@ -25,13 +25,14 @@ impl VirtualFileSystem
     pub fn new() -> VirtualFileSystem
     {
         let fat = FatVolume::new(0, 0);
-        return VirtualFileSystem { fat_volume: fat, is_init: false, dir_cluster_list: Vec::new() };
+        return VirtualFileSystem { fat_volume: fat, is_init: false, current_dir_cluster_num: 2 };
     }
 
     pub fn init(&mut self, start_base_addr: u32, end_base_addr: u32)
     {
         self.fat_volume = FatVolume::new(start_base_addr, end_base_addr);
         self.fat_volume.init();
+        self.current_dir_cluster_num = self.fat_volume.get_root_dir_cluster_num().unwrap();
         self.is_init = self.fat_volume.is_init();
 
         if self.is_init
@@ -44,12 +45,14 @@ impl VirtualFileSystem
         }
     }
 
-    // return is continuing claster
-    fn scan(&mut self, start_cluster_num: usize) -> bool
+    // return Vec<(filename, file attribute, pointing cluster num)>
+    fn scan(&mut self, start_cluster_num: usize) -> Vec<(String, FileAttribute, usize)>
     {
+        let mut result = Vec::new();
+
         if start_cluster_num < 2
         {
-            return false;
+            return result;
         }
 
         let dir_entries_per_cluster = self.fat_volume.get_dir_entries_per_cluster();
@@ -58,10 +61,10 @@ impl VirtualFileSystem
         let i = start_cluster_num;
         let mut file_name_buf = String::new();
 
-        if start_cluster_num == self.fat_volume.get_root_dir_cluster_num().unwrap()
-        {
-            self.dir_cluster_list.push((start_cluster_num, String::from(PATH_SEPARATOR)));
-        }
+        // if start_cluster_num == self.fat_volume.get_root_dir_cluster_num().unwrap()
+        // {
+        //     self.dir_cluster_list.push((start_cluster_num, String::from(PATH_SEPARATOR)));
+        // }
 
         // dir entries in a cluster
         for j in (i - 2) * dir_entries_per_cluster..(i - 2) * dir_entries_per_cluster + dir_entries_per_cluster
@@ -86,33 +89,34 @@ impl VirtualFileSystem
 
             if file_name_buf != ""
             {
-                println!("\"{}\"(cn: {})(fcn: {})", file_name_buf, i, de.get_first_cluster_num());
+                //println!("\"{}\"(cn: {})(fcn: {})", file_name_buf, i, de.get_first_cluster_num());
 
-                if file_attr == Some(FileAttribute::Directory)
-                {
-                    let parent_dir_name = &self.dir_cluster_list[self.dir_cluster_list.len() - 1].1;
-                    self.dir_cluster_list.push((de.get_first_cluster_num(), file_name_buf.clone()));
-                    println!("=={}(start)==", file_name_buf);
-                    self.scan(de.get_first_cluster_num());
-                    println!("=={}(end)==", file_name_buf);
-                }
+                // if file_attr == Some(FileAttribute::Directory)
+                // {
+                //     let parent_dir_name = &self.dir_cluster_list[self.dir_cluster_list.len() - 1].1;
+                //     self.dir_cluster_list.push((de.get_first_cluster_num(), file_name_buf.clone()));
+                //     println!("=={}(start)==", file_name_buf);
+                //     //self.scan(de.get_first_cluster_num());
+                //     println!("=={}(end)==", file_name_buf);
+                // }
 
+                result.push((file_name_buf.clone(), de.get_file_attr().unwrap(), de.get_first_cluster_num()));
                 file_name_buf.clear();
             }
         }
 
         // is skip after cluster?
-        if let Some(next_cluster) = self.fat_volume.get_next_cluster(i)
-        {
-            //println!("cp: {:?}", next_cluster);
-            match next_cluster
-            {
-                ClusterType::EndOfChain(_) => return false,
-                _ => return true
-            }
-        }
+        // if let Some(next_cluster) = self.fat_volume.get_next_cluster(i)
+        // {
+        //     //println!("cp: {:?}", next_cluster);
+        //     match next_cluster
+        //     {
+        //         ClusterType::EndOfChain(_) => return false,
+        //         _ => return true
+        //     }
+        // }
 
-        return false;
+        return result;
     }
 
     // fat32 only
@@ -123,67 +127,30 @@ impl VirtualFileSystem
             return;
         }
 
-        self.scan(2);
-        //println!("{:?}", self.dir_cluster_list);
+        let a = self.scan(self.current_dir_cluster_num);
+        println!("{:?}", a);
+    }
 
-        // let mut c_num = self.fat_volume.get_root_dir_cluster_num().unwrap();
-        // while c_num < /*self.fat_volume.get_dir_entries_max_num() / self.fat_volume.get_dir_entries_per_cluster()*/ 10
-        // {
-        //     //println!("c_num: {}", c_num);
-        //     let result = self.scan(c_num);
-        //     //println!("c_num: {}", result);
-        //     c_num = result + 1;
-        // }
+    pub fn cd(&mut self, dir_name: &str)
+    {
+        if !self.is_init
+        {
+            return;
+        }
 
-        // let mut i = 0;
-        // while i < self.fat_volume.get_dir_entries_max_num()
-        // {
-        //     let cluster_num = self.fat_volume.get_cluster_num_from_dir_entry_num(i);
-        //     // skip this cluster?
-        //     if i % self.fat_volume.get_dir_entries_per_cluster() == 0
-        //     {
-        //         if let Some(next_cluster) = self.fat_volume.get_next_cluster(cluster_num)
-        //         {
-        //             match next_cluster
-        //             {
-        //                 ClusterType::Data(_) => (),
-        //                 ClusterType::EndOfChain(_) => (),
-        //                 _ =>
-        //                 {
-        //                     i += self.fat_volume.get_dir_entries_per_cluster();
-        //                     continue;
-        //                 }
-        //             }
-        //         }
-        //         else
-        //         {
-        //             i += self.fat_volume.get_dir_entries_per_cluster();
-        //             continue;
-        //         }
-        //     }
+        let current_dir = self.scan(self.current_dir_cluster_num);
+        println!("{:?}", current_dir);
 
-        //     let de = self.fat_volume.get_dir_entry(i).unwrap();
-        //     let entry_type = de.entry_type();
-        //     let file_attr = de.get_file_attr();
+        for file in current_dir
+        {
+            if file.0 == dir_name &&
+               file.1 == FileAttribute::Directory
+            {
+                self.current_dir_cluster_num = file.2;
+                return;
+            }
+        }
 
-        //     if entry_type == EntryType::Null &&
-        //        file_attr == None
-        //     {
-        //         i += 1;
-        //         continue;
-        //     }
-
-        //     if let Some(path) = self.get_full_path(i)
-        //     {
-        //         println!("path: \"{}\"", path);
-        //     }
-
-        //     if let Some(file_name) = self.fat_volume.get_file_name_from_dir_entry_num(i)
-        //     {
-        //         println!("{}(de_cnt: {})", file_name, i);
-        //     }
-
-        //     i += 1;
-        // }
+        println!("Directory \"{}\" was not found in current directory", dir_name);
     }
 }

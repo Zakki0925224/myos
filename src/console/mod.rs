@@ -94,9 +94,10 @@ impl SystemConsole
         }
 
         let input = self.input_buf.iter().collect::<String>();
+        let args: Vec<&str> = input.split_whitespace().collect();
 
         // TODO: make command list
-        match input.as_str()
+        match args[0]
         {
             "lspci" => self.do_process(|| PCI.lock().lspci()),
             "iahci" => self.do_process(|| AHCI.lock().ahci_info()),
@@ -106,6 +107,10 @@ impl SystemConsole
             "clear" => self.do_process(|| VGA_SCREEN.lock().cls()),
             "itest" => self.do_process(|| asm::test()),
             "ls" => self.do_process(|| VFS.lock().ls()),
+            "cd" => self.do_process(||
+            {
+                VFS.lock().cd(args[1]);
+            }),
             _ => println!("\nUnknown command")
         }
     }
