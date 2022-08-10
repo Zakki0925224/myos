@@ -2,8 +2,8 @@ use core::{alloc::{GlobalAlloc, Layout}, ptr::null_mut, cell::UnsafeCell};
 
 use crate::println;
 
-pub const HEAP_AREA_BASE_ADDR: u32 = 0x64000;
-pub const HEAP_SIZE: u32 = 100 * 1024; // 100KiB
+pub const HEAP_AREA_BASE_ADDR: u32 = 0x640000;
+pub const HEAP_SIZE: u32 = 1024 * 1024 * 1024; // 10MiB
 
 #[global_allocator]
 static ALLOCATOR: Allocator = Allocator { base_addr: UnsafeCell::new(HEAP_AREA_BASE_ADDR) };
@@ -37,6 +37,8 @@ unsafe impl GlobalAlloc for Allocator
         //println!("addr: {}, size: {}, align: {}", *base_addr, size, align);
 
         let offset = (size + ((align - 1) & !(align - 1))) * size;
+
+        //println!("0x{:x} > 0x{:x}", *base_addr + offset, HEAP_AREA_BASE_ADDR + HEAP_SIZE);
 
         if *base_addr + offset > HEAP_AREA_BASE_ADDR + HEAP_SIZE
         {

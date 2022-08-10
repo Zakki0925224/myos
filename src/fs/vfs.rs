@@ -1,10 +1,10 @@
-use core::mem::size_of;
+use core::{mem::size_of, ptr::read_volatile};
 
 use alloc::{vec::Vec, string::{ToString, String}, format};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::{util::logger::{log_info, log_warn, log_debug}, println, fs::fat::{file_allocation_table::ClusterType, dir_entery::{FileAttribute, PARENT_DIR_FILE_NAME, DirectoryEntry}}};
+use crate::{util::logger::{log_info, log_warn, log_debug}, println, fs::fat::{file_allocation_table::ClusterType, dir_entery::{FileAttribute, PARENT_DIR_FILE_NAME, DirectoryEntry}}, mem::PHYS_MEM_MANAGER};
 
 use super::fat::{FatVolume, dir_entery::EntryType};
 
@@ -166,7 +166,33 @@ impl VirtualFileSystem
 
                 println!("base addr: 0x{:x}", base_addr);
                 println!("size: {}B", size);
+
+                let end_base_addr = base_addr + size as u32;
+
+                // TODO: read file
+                let mut buf = Vec::new();
+                // max 512B
+                for i in base_addr..end_base_addr
+                {
+                    unsafe
+                    {
+                        let ptr = i as *const u8;
+                        let c = read_volatile(ptr) as char;
+
+                        if c == '\0'
+                        {
+                            buf.push(c);
+                            break;
+                        }
+
+                        buf.push(c);
+                    }
+                }
+
+                println!("{}", buf.into_iter().collect::<String>());
+
                 read_cnt += 1;
+                continue;
             }
         }
 

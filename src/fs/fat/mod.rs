@@ -135,147 +135,59 @@ impl FatVolume
 
     pub fn get_long_file_name_entry(&self, entry_num: usize) -> Option<LongFileNameEntry>
     {
-        if entry_num > self.get_dir_entries_max_num()
+        if let Some(base_addr) = self.get_dir_entry_base_addr(entry_num)
+        {
+            let entry = LongFileNameEntry::read(base_addr);
+
+            match entry.is_valid_entry()
+            {
+                true => return Some(entry),
+                false => return None,
+            }
+        }
+        else
         {
             return None;
         }
-
-        let entries_per_cluster = self.get_dir_entries_per_cluster();
-
-        let data_area_start_offset = self.boot_sector.data_area_start_sector_num() * self.boot_sector.get_sector_size();
-        let offset = data_area_start_offset + (entry_num * size_of::<DirectoryEntry>());
-        let base_addr = self.start_base_addr + offset as u32;
-        let entry = LongFileNameEntry::read(base_addr);
-
-        match entry.is_valid_entry()
-        {
-            true => return Some(entry),
-            false => return None,
-        }
     }
 
-    // String -> long file name, usize -> long file name directories cnt
-    // pub fn get_file_name_from_dir_entry_num(&self, dir_entry_num: usize) -> Option<String>
+    // TODO
+    // pub fn get_clusters_chain_length(&self, start_cluster_num: usize) -> usize
     // {
-    //     if dir_entry_num == 0 || dir_entry_num > self.get_dir_entries_max_num()
+    //     if start_cluster_num < 2
     //     {
-    //         return None;
+    //         return 0;
     //     }
 
-    //     let mut is_found_target = false;
-    //     let mut long_file_name_buf = [LFN_EMPTY_CHAR; LFN_MAX];
-    //     let mut buf_cnt = 0;
+    //     let fat_clusters_cnt = self.boot_sector.data_area_sectors_cnt() / self.boot_sector.get_cluster_size() - 2;
 
-    //     for i in (0..dir_entry_num).rev()
+    //     if fat_clusters_cnt < start_cluster_num
     //     {
-    //         let de = self.get_dir_entry(i).unwrap();
-    //         let entry_type = de.entry_type();
-    //         let file_attr = de.get_file_attr();
+    //         return 0;
+    //     }
 
-    //         if i == dir_entry_num
+    //     let mut i = start_cluster_num;
+
+    //     while i < fat_clusters_cnt - start_cluster_num
+    //     {
+    //         if let Some(cluster_type) = self.get_next_cluster(i)
     //         {
-    //             if file_attr != Some(FileAttribute::Archive) ||
-    //                file_attr != Some(FileAttribute::Directory)
+    //             match cluster_type
     //             {
-    //                 return None;
-    //             }
-
-    //             //if entry_type == EntryType::
-    //         }
-    //         else
-    //         {
-    //             is_found_target = true;
-    //         }
-
-    //         if is_found_target
-    //         {
-    //             if file_attr != Some(FileAttribute::LongFileName)
-    //             {
-    //                 break;
-    //             }
-
-    //             let lfn_entry = self.get_long_file_name_entry(i).unwrap();
-    //             let file_name_chars: Vec<char> = lfn_entry.get_file_name().chars().collect();
-
-    //             for j in 0..file_name_chars.len()
-    //             {
-    //                 if buf_cnt == LFN_MAX - 1
-    //                 {
-    //                     break;
-    //                 }
-
-    //                 long_file_name_buf[buf_cnt] = file_name_chars[j];
-    //                 buf_cnt += 1;
+    //                 ClusterType::EndOfChain(_) => return i - start_cluster_num + 1,
+    //                 _ => ()
     //             }
     //         }
     //         else
     //         {
-    //             return None;
+    //             return 0;
     //         }
+
+    //         i += 1;
     //     }
 
-    //     let mut str_buf = String::new();
-    //     for i in 0..LFN_MAX
-    //     {
-    //         if long_file_name_buf[i] != LFN_EMPTY_CHAR
-    //         {
-    //             str_buf.push(long_file_name_buf[i]);
-    //         }
-    //     }
-
-    //     if str_buf == ""
-    //     {
-    //         return None;
-    //     }
-
-    //     return Some(str_buf);
+    //     return i;
     // }
-
-    // DirectoryEntry -> current dir, DirectoryEntry -> parent dir
-    // pub fn get_dirs_dir_entry(&self, dir_entry_num: usize) -> Option<(DirectoryEntry, DirectoryEntry)>
-    // {
-    //     let name = self.get_file_name_from_dir_entry_num(dir_entry_num);
-
-    //     match name
-    //     {
-    //         Some(_) => (),
-    //         None => return None,
-    //     }
-
-    //     let cluster_num = dir_entry_num / self.get_dir_entries_per_cluster();
-    //     let first_cluster_num = self.get_first_cluster_chain_from_cluster_name(cluster_num);
-
-    //     match first_cluster_num
-    //     {
-    //         None => return None,
-    //         Some(num) =>
-    //         {
-    //             let current_dir = self.get_dir_entry(num * self.get_dir_entries_per_cluster());
-    //             let parent_dir = self.get_dir_entry(num * self.get_dir_entries_per_cluster() + 1);
-
-    //             if current_dir != None && parent_dir != None
-    //             {
-    //                 return Some((current_dir.unwrap(), parent_dir.unwrap()));
-    //             }
-    //             else
-    //             {
-    //                 return None;
-    //             }
-    //         },
-    //     }
-    // }
-
-    pub fn get_first_cluster_chain_from_cluster_name(&self, cluster_num: usize) -> Option<usize>
-    {
-        let fat_clusters_cnt = self.boot_sector.fat_area_sectors_cnt() / self.boot_sector.get_cluster_size();
-
-        if fat_clusters_cnt < cluster_num
-        {
-            return None;
-        }
-
-        return Some(file_allocation_table::get_first_cluster_chain_from_cluster_name(self.start_base_addr, self.get_fat_type(), cluster_num));
-    }
 
     pub fn get_next_cluster(&self, cluster_num: usize) -> Option<ClusterType>
     {
