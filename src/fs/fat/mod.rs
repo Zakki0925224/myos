@@ -109,6 +109,16 @@ impl FatVolume
 
     pub fn get_dir_entry(&self, entry_num: usize) -> Option<DirectoryEntry>
     {
+        if let Some(base_addr) = self.get_dir_entry_base_addr(entry_num)
+        {
+            return Some(DirectoryEntry::read(base_addr));
+        }
+
+        return None;
+    }
+
+    pub fn get_dir_entry_base_addr(&self, entry_num: usize) -> Option<u32>
+    {
         if entry_num > self.get_dir_entries_max_num()
         {
             return None;
@@ -120,7 +130,7 @@ impl FatVolume
         let offset = data_area_start_offset + (entry_num * size_of::<DirectoryEntry>());
         let base_addr = self.start_base_addr + offset as u32;
 
-        return Some(DirectoryEntry::read(base_addr));
+        return Some(base_addr);
     }
 
     pub fn get_long_file_name_entry(&self, entry_num: usize) -> Option<LongFileNameEntry>
@@ -144,7 +154,7 @@ impl FatVolume
         }
     }
 
-    // // String -> long file name, usize -> long file name directories cnt
+    // String -> long file name, usize -> long file name directories cnt
     // pub fn get_file_name_from_dir_entry_num(&self, dir_entry_num: usize) -> Option<String>
     // {
     //     if dir_entry_num == 0 || dir_entry_num > self.get_dir_entries_max_num()

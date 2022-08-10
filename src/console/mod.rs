@@ -93,6 +93,7 @@ impl SystemConsole
             return;
         }
 
+        self.input_buf.push(' ');
         let input = self.input_buf.iter().collect::<String>();
         let args: Vec<&str> = input.split_whitespace().collect();
 
@@ -109,7 +110,17 @@ impl SystemConsole
             "ls" => self.do_process(|| VFS.lock().ls()),
             "cd" => self.do_process(||
             {
-                VFS.lock().cd(args[1]);
+                if args.len() > 1
+                {
+                    VFS.lock().cd(args[1]);
+                }
+            }),
+            "cat" => self.do_process(||
+            {
+                if args.len() > 1
+                {
+                    VFS.lock().cat(args[1]);
+                }
             }),
             _ => println!("\nUnknown command")
         }

@@ -1,12 +1,15 @@
+use core::mem::size_of;
+
 use alloc::{vec::Vec, string::{ToString, String}, format};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::{util::logger::{log_info, log_warn}, println, fs::fat::{file_allocation_table::ClusterType, dir_entery::FileAttribute}, print};
+use crate::{util::logger::{log_info, log_warn, log_debug}, println, fs::fat::{file_allocation_table::ClusterType, dir_entery::{FileAttribute, PARENT_DIR_FILE_NAME, DirectoryEntry}}};
 
 use super::fat::{FatVolume, dir_entery::EntryType};
 
-const PATH_SEPARATOR: &str = "/";
+pub const PATH_SEPARATOR: &str = "/";
+pub const PARENT_DIR_PATH: &str = "../";
 
 lazy_static!
 {
@@ -45,6 +48,33 @@ impl VirtualFileSystem
         }
     }
 
+    // TODO:
+    // pub fn get_current_dir_name(&self) -> &str
+    // {
+    //     if !self.is_init
+    //     {
+    //         return "NODIR";
+    //     }
+
+    //     if self.current_dir_cluster_num == self.fat_volume.get_root_dir_cluster_num().unwrap()
+    //     {
+    //         return PATH_SEPARATOR;
+    //     }
+
+    //     if let Some(de) = self.fat_volume.get_dir_entry((self.current_dir_cluster_num - 2) * self.fat_volume.get_dir_entries_per_cluster() + 1)
+    //     {
+    //         let cluster_num = de.get_first_cluster_num();
+    //         if cluster_num == 0
+    //         {
+
+    //         }
+    //         else
+    //         {
+    //             self.current_dir_cluster_num = de.get_first_cluster_num();
+    //         }
+    //     }
+    // }
+
     // return Vec<(filename, file attribute, pointing cluster num)>
     fn scan(&mut self, start_cluster_num: usize) -> Vec<(String, FileAttribute, usize)>
     {
@@ -55,16 +85,16 @@ impl VirtualFileSystem
             return result;
         }
 
+        if !self.is_init
+        {
+            return result;
+        }
+
         let dir_entries_per_cluster = self.fat_volume.get_dir_entries_per_cluster();
         let max_cluster_num = self.fat_volume.get_dir_entries_max_num() / dir_entries_per_cluster;
 
         let i = start_cluster_num;
         let mut file_name_buf = String::new();
-
-        // if start_cluster_num == self.fat_volume.get_root_dir_cluster_num().unwrap()
-        // {
-        //     self.dir_cluster_list.push((start_cluster_num, String::from(PATH_SEPARATOR)));
-        // }
 
         // dir entries in a cluster
         for j in (i - 2) * dir_entries_per_cluster..(i - 2) * dir_entries_per_cluster + dir_entries_per_cluster
@@ -89,34 +119,61 @@ impl VirtualFileSystem
 
             if file_name_buf != ""
             {
-                //println!("\"{}\"(cn: {})(fcn: {})", file_name_buf, i, de.get_first_cluster_num());
-
-                // if file_attr == Some(FileAttribute::Directory)
-                // {
-                //     let parent_dir_name = &self.dir_cluster_list[self.dir_cluster_list.len() - 1].1;
-                //     self.dir_cluster_list.push((de.get_first_cluster_num(), file_name_buf.clone()));
-                //     println!("=={}(start)==", file_name_buf);
-                //     //self.scan(de.get_first_cluster_num());
-                //     println!("=={}(end)==", file_name_buf);
-                // }
-
                 result.push((file_name_buf.clone(), de.get_file_attr().unwrap(), de.get_first_cluster_num()));
                 file_name_buf.clear();
             }
         }
 
-        // is skip after cluster?
-        // if let Some(next_cluster) = self.fat_volume.get_next_cluster(i)
-        // {
-        //     //println!("cp: {:?}", next_cluster);
-        //     match next_cluster
-        //     {
-        //         ClusterType::EndOfChain(_) => return false,
-        //         _ => return true
-        //     }
-        // }
-
         return result;
+    }
+
+    pub fn cat(&mut self, file_name: &str)
+    {
+        let mut read_cnt = 0;
+
+        for file in self.scan(self.current_dir_cluster_num).iter().filter(|f| f.1 == FileAttribute::Archive)
+        {
+            if file_name == file.0
+            {
+                let mut base_addr = 0;
+                let mut size = 0;
+
+                for i in 0..self.fat_volume.get_dir_entries_per_cluster()
+                {
+                    // file size is 0byte
+                    if file.2 == 0
+                    {
+                        println!("This file is null");
+                        return;
+                    }
+
+                    let de = self.fat_volume.get_dir_entry((file.2 - 2) * self.fat_volume.get_dir_entries_per_cluster() + i).unwrap();
+                    //log_debug("file", &de);
+
+                    if de.entry_type() != EntryType::Data
+                    {
+                        break;
+                    }
+
+                    if i == 0
+                    {
+                        let addr = self.fat_volume.get_dir_entry_base_addr((file.2 - 2) * self.fat_volume.get_dir_entries_per_cluster() + i).unwrap();
+                        base_addr = addr;
+                    }
+
+                    size += size_of::<DirectoryEntry>();
+                }
+
+                println!("base addr: 0x{:x}", base_addr);
+                println!("size: {}B", size);
+                read_cnt += 1;
+            }
+        }
+
+        if read_cnt == 0
+        {
+            println!("File \"{}\" was not found in current directory", file_name);
+        }
     }
 
     // fat32 only
@@ -127,8 +184,13 @@ impl VirtualFileSystem
             return;
         }
 
-        let a = self.scan(self.current_dir_cluster_num);
-        println!("{:?}", a);
+        let current_dir = self.scan(self.current_dir_cluster_num);
+        log_debug("current", &current_dir);
+
+        for file in current_dir
+        {
+            println!("{}", file.0);
+        }
     }
 
     pub fn cd(&mut self, dir_name: &str)
@@ -138,8 +200,36 @@ impl VirtualFileSystem
             return;
         }
 
+        if dir_name == PARENT_DIR_PATH
+        {
+            if self.current_dir_cluster_num == self.fat_volume.get_root_dir_cluster_num().unwrap()
+            {
+                return;
+            }
+
+            if let Some(de) = self.fat_volume.get_dir_entry((self.current_dir_cluster_num - 2) * self.fat_volume.get_dir_entries_per_cluster() + 1)
+            {
+                if de.get_file_short_name().as_str() == PARENT_DIR_FILE_NAME
+                {
+                    let cluster_num = de.get_first_cluster_num();
+
+                    if cluster_num == 0
+                    {
+                        self.current_dir_cluster_num = self.fat_volume.get_root_dir_cluster_num().unwrap();
+                    }
+                    else
+                    {
+                        self.current_dir_cluster_num = de.get_first_cluster_num();
+                    }
+
+                    //println!("go to parent dir!");
+                }
+            }
+
+            return;
+        }
+
         let current_dir = self.scan(self.current_dir_cluster_num);
-        println!("{:?}", current_dir);
 
         for file in current_dir
         {
