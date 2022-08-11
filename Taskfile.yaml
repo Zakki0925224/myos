@@ -61,7 +61,7 @@ tasks:
         dir: "{{$.FS_DIR}}"
         cmds:
             - dd if=/dev/zero of=../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} bs=1M count=128 # 128MiB
-            - mkfs.fat -n "MYOS" -F 32 ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} # format for FAT32
+            - mkfs.fat -n "MYOS" -F 32 -s 2 ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}} # format for FAT32
             - sudo losetup /dev/loop0 ../{{$.OUTPUT_DIR}}/{{$.FS_FILE}}
             - sudo mount /dev/loop0 /mnt
             - find . -type f -exec sudo cp --parents {} /mnt \;

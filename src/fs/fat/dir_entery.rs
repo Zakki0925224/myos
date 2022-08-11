@@ -3,6 +3,8 @@ use core::{ptr::read_volatile, char::{decode_utf16, REPLACEMENT_CHARACTER}};
 use alloc::{string::{String, ToString}, vec::Vec};
 use modular_bitfield::{bitfield, prelude::*};
 
+use crate::println;
+
 pub const CURRENT_DIR_FILE_NAME: &str = ".          ";
 pub const PARENT_DIR_FILE_NAME: &str = "..         ";
 
@@ -91,32 +93,6 @@ impl DirectoryEntry
         return high | low;
     }
 
-    // return (year, month, date, hour, minutes, second)
-    // pub fn get_create_time(&self) -> (u8, u8, u8, u8, u8, u8)
-    // {
-    //     let date = self.create_date();
-    //     let time = self.create_time();
-    //     let time_ms = self.create_time_ms();
-
-    //     let y = 1980 + (date >> 8) as u8;
-    //     let m = ((date & 0xf0) >> 4) as u8;
-    //     let d = date as u8;
-    //     let h = (time >> 8) as u8;
-    //     let m = ((time & 0x) >> 4)
-
-    //     return (y, m, d, time_ms);
-    // }
-
-    // pub fn get_last_mod_time(&self) -> (u8, u8, u8)
-    // {
-    //     let date = self.last_modified_date();
-    //     let time = self.last_modified_time();
-
-    //     let y = 1980 + (date >> 8) as u8;
-    //     let m = ((date & 0xf0) >> 4) as u8;
-    //     let d =
-    // }
-
     pub fn entry_type(&self) -> EntryType
     {
         let first_byte = (self.file_short_name() >> 80) as u8;
@@ -203,26 +179,43 @@ impl LongFileNameEntry
         for i in 0..5
         {
             let c = (self.file_name1() >> i * 16) as u16;
-            utf16_buf.push(c);
+            if c != 0xffff
+            {
+                utf16_buf.push(c);
+            }
         }
 
         // file_name2
         for i in 0..6
         {
             let c = (self.file_name2() >> i * 16) as u16;
-            utf16_buf.push(c);
+            if c != 0xffff
+            {
+                utf16_buf.push(c);
+            }
         }
 
         // file_name3
         for i in 0..2
         {
             let c = (self.file_name3() >> i * 16) as u16;
-            utf16_buf.push(c);
+            if c != 0xffff
+            {
+                utf16_buf.push(c);
+            }
         }
+
+        //println!("{:?}", utf16_buf);
 
         let string: String = decode_utf16(utf16_buf.iter().take_while(|&v| *v != 0).cloned())
             .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
             .collect();
+        //println!("{:?}", string);
         return string;
+    }
+
+    pub fn get_checksum(&self) -> u8
+    {
+        return self.checksum();
     }
 }

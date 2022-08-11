@@ -2,7 +2,7 @@ use core::{alloc::{GlobalAlloc, Layout}, ptr::null_mut, cell::UnsafeCell};
 
 use crate::println;
 
-pub const HEAP_AREA_BASE_ADDR: u32 = 0x640000;
+pub const HEAP_AREA_BASE_ADDR: u32 = 0x6400000;
 pub const HEAP_SIZE: u32 = 1024 * 1024 * 1024; // 10MiB
 
 #[global_allocator]
@@ -21,7 +21,6 @@ unsafe impl GlobalAlloc for Allocator
     {
         let size = layout.size() as u32;
         let align = layout.align() as u32;
-
         let base_addr = self.base_addr.get();
 
         if size > HEAP_SIZE
@@ -35,8 +34,9 @@ unsafe impl GlobalAlloc for Allocator
         }
 
         //println!("addr: {}, size: {}, align: {}", *base_addr, size, align);
+        // (i + (N-1)) & ~(N-1)
 
-        let offset = (size + ((align - 1) & !(align - 1))) * size;
+        let offset = (size + (align - 1)) & !(align - 1);
 
         //println!("0x{:x} > 0x{:x}", *base_addr + offset, HEAP_AREA_BASE_ADDR + HEAP_SIZE);
 
@@ -45,9 +45,11 @@ unsafe impl GlobalAlloc for Allocator
             return null_mut();
         }
 
+        let before_base_addr = (*self.base_addr.get()).clone();
+
         *base_addr += offset;
 
-        return *base_addr as *mut u8;
+        return before_base_addr as *mut u8;
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}

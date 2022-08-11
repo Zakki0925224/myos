@@ -16,6 +16,14 @@ lazy_static!
     pub static ref VFS: Mutex<VirtualFileSystem> = Mutex::new(VirtualFileSystem::new());
 }
 
+#[derive(Debug)]
+struct File
+{
+    pub file_name: String,
+    pub attr: FileAttribute,
+    pub pointing_cluster_num: usize
+}
+
 pub struct VirtualFileSystem
 {
     fat_volume: FatVolume,
@@ -49,7 +57,7 @@ impl VirtualFileSystem
     }
 
     // return Vec<(filename, file attribute, pointing cluster num)>
-    fn scan(&mut self, start_cluster_num: usize) -> Vec<(String, FileAttribute, usize)>
+    fn scan(&mut self, start_cluster_num: usize) -> Vec<File>
     {
         let mut result = Vec::new();
 
@@ -66,39 +74,53 @@ impl VirtualFileSystem
         let dir_entries_per_cluster = self.fat_volume.get_dir_entries_per_cluster();
         let max_cluster_num = self.fat_volume.get_dir_entries_max_num() / dir_entries_per_cluster;
 
-        let mut file_name_buf = String::new();
+        let mut file_name_buf = Vec::new();
         let cluster_chain_list = self.fat_volume.get_cluster_chain_list(start_cluster_num);
+        //log_debug("cluster chain list", &cluster_chain_list);
 
         for cluster_num in cluster_chain_list
         {
+            //println!("cluster_num: {}", cluster_num);
             // dir entries in a cluster
             for i in (cluster_num - 2) * dir_entries_per_cluster..(cluster_num - 2) * dir_entries_per_cluster + dir_entries_per_cluster
             {
-                //println!("j: {}", j);
                 let de = self.fat_volume.get_dir_entry(i).unwrap();
                 let entry_type = de.entry_type();
                 let file_attr = de.get_file_attr();
 
+                //println!("j: {}, {:?} {:?}", i, entry_type, file_attr);
+
                 if entry_type == EntryType::Null &&
                     file_attr == None
                 {
+                    break;
+                }
+
+                if let Some(lfn_entry) = self.fat_volume.get_long_file_name_entry(i)
+                {
+                    file_name_buf.push(lfn_entry.get_file_name());
                     continue;
                 }
 
-                if file_attr == Some(FileAttribute::LongFileName)
+                if (file_attr == Some(FileAttribute::Archive) || file_attr == Some(FileAttribute::Directory)) &&
+                   file_name_buf.len() != 0
                 {
-                    let lfn = self.fat_volume.get_long_file_name_entry(i).unwrap();
-                    file_name_buf = format!("{}{}", lfn.get_file_name(), file_name_buf);
-                    continue;
-                }
-
-                if file_name_buf != ""
-                {
-                    result.push((file_name_buf.clone(), de.get_file_attr().unwrap(), de.get_first_cluster_num()));
-                    file_name_buf.clear();
+                    file_name_buf.reverse();
+                    let joined = file_name_buf.join("");
+                    //println!("\"{}\", len: {}", joined, joined.len());
+                    //println!("pushed: {:?}, str len: {}", joined, joined.len());
+                    //result.push(joined ,de.get_file_attr().unwrap(), de.get_first_cluster_num()));
+                    let file = File { file_name: joined, attr: de.get_file_attr().unwrap(), pointing_cluster_num: de.get_first_cluster_num() };
+                    //println!("{:?}", file);
+                    result.push(file);
+                    //println!("{:?}", result.last());
+                    // log_debug("file name buf", &file_name_buf);
+                    file_name_buf.clear()
                 }
             }
         }
+
+        println!("len: {}", result[3].file_name.len());
 
         return result;
     }
@@ -107,12 +129,12 @@ impl VirtualFileSystem
     {
         let mut read_cnt = 0;
 
-        for file in self.scan(self.current_dir_cluster_num).iter().filter(|f| f.1 == FileAttribute::Archive)
+        for file in self.scan(self.current_dir_cluster_num).iter().filter(|f| f.attr == FileAttribute::Archive)
         {
-            if file_name == file.0
+            if file_name == file.file_name
             {
                 // file size is 0byte
-                if file.2 == 0
+                if file.pointing_cluster_num == 0
                 {
                     println!("This file is null");
                     return;
@@ -120,7 +142,7 @@ impl VirtualFileSystem
 
                 let mut base_addr_list = Vec::new();
                 let mut size = 0;
-                let cluster_chain_list = self.fat_volume.get_cluster_chain_list(file.2);
+                let cluster_chain_list = self.fat_volume.get_cluster_chain_list(file.pointing_cluster_num);
 
                 for cluster_num in cluster_chain_list
                 {
@@ -192,7 +214,7 @@ impl VirtualFileSystem
 
         for file in current_dir
         {
-            println!("{}", file.0);
+            println!("{}", file.file_name);
         }
     }
 
@@ -236,10 +258,10 @@ impl VirtualFileSystem
 
         for file in current_dir
         {
-            if file.0 == dir_name &&
-               file.1 == FileAttribute::Directory
+            if file.file_name == dir_name &&
+               file.attr == FileAttribute::Directory
             {
-                self.current_dir_cluster_num = file.2;
+                self.current_dir_cluster_num = file.pointing_cluster_num;
                 return;
             }
         }
