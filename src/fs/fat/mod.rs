@@ -151,49 +151,41 @@ impl FatVolume
         }
     }
 
-    // TODO
-    // pub fn get_clusters_chain_length(&self, start_cluster_num: usize) -> usize
-    // {
-    //     if start_cluster_num < 2
-    //     {
-    //         return 0;
-    //     }
+    pub fn get_cluster_chain_list(&self, start_cluster_num: usize) -> Vec<usize>
+    {
+        let mut list = Vec::new();
+        let mut cluster_num = start_cluster_num;
+        list.push(start_cluster_num);
 
-    //     let fat_clusters_cnt = self.boot_sector.data_area_sectors_cnt() / self.boot_sector.get_cluster_size() - 2;
+        loop
+        {
+            if let Some(cluster_type) = self.get_next_cluster(cluster_num)
+            {
+                match cluster_type
+                {
+                    ClusterType::EndOfChain(_) => break,
+                    ClusterType::Free(num) => { list.push(num); cluster_num = num; },
+                    ClusterType::Reserved(num) => { list.push(num); cluster_num = num; },
+                    ClusterType::Data(num) => { list.push(num); cluster_num = num; },
+                    ClusterType::Bad(num) => { list.push(num); cluster_num = num; },
+                    ClusterType::Other(num) => { list.push(num); cluster_num = num; },
 
-    //     if fat_clusters_cnt < start_cluster_num
-    //     {
-    //         return 0;
-    //     }
+                }
+            }
+            else
+            {
+                return Vec::new();
+            }
+        }
 
-    //     let mut i = start_cluster_num;
-
-    //     while i < fat_clusters_cnt - start_cluster_num
-    //     {
-    //         if let Some(cluster_type) = self.get_next_cluster(i)
-    //         {
-    //             match cluster_type
-    //             {
-    //                 ClusterType::EndOfChain(_) => return i - start_cluster_num + 1,
-    //                 _ => ()
-    //             }
-    //         }
-    //         else
-    //         {
-    //             return 0;
-    //         }
-
-    //         i += 1;
-    //     }
-
-    //     return i;
-    // }
+        return list;
+    }
 
     pub fn get_next_cluster(&self, cluster_num: usize) -> Option<ClusterType>
     {
-        let fat_clusters_cnt = self.boot_sector.fat_area_sectors_cnt() / self.boot_sector.get_cluster_size();
+        let max_cluster_num = self.get_dir_entries_max_num() * self.get_dir_entries_per_cluster();
 
-        if fat_clusters_cnt < cluster_num
+        if cluster_num > max_cluster_num
         {
             return None;
         }

@@ -91,6 +91,32 @@ impl DirectoryEntry
         return high | low;
     }
 
+    // return (year, month, date, hour, minutes, second)
+    // pub fn get_create_time(&self) -> (u8, u8, u8, u8, u8, u8)
+    // {
+    //     let date = self.create_date();
+    //     let time = self.create_time();
+    //     let time_ms = self.create_time_ms();
+
+    //     let y = 1980 + (date >> 8) as u8;
+    //     let m = ((date & 0xf0) >> 4) as u8;
+    //     let d = date as u8;
+    //     let h = (time >> 8) as u8;
+    //     let m = ((time & 0x) >> 4)
+
+    //     return (y, m, d, time_ms);
+    // }
+
+    // pub fn get_last_mod_time(&self) -> (u8, u8, u8)
+    // {
+    //     let date = self.last_modified_date();
+    //     let time = self.last_modified_time();
+
+    //     let y = 1980 + (date >> 8) as u8;
+    //     let m = ((date & 0xf0) >> 4) as u8;
+    //     let d =
+    // }
+
     pub fn entry_type(&self) -> EntryType
     {
         let first_byte = (self.file_short_name() >> 80) as u8;
